@@ -1,0 +1,9 @@
+.env
+node_modules/
+web/data/
+inbox/incoming/*
+inbox/processed/*
+!inbox/incoming/.gitkeep
+!inbox/processed/.gitkeep
+.DS_Store
+*.log

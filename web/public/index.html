@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ekomino HR Panel</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23ff6b3d'/><text x='16' y='22' font-size='16' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'>E</text></svg>" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">E</span>
+      <div>
+        <strong>Ekomino</strong>
+        <small>HR · CV Screening Agent</small>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="dashboard">Dashboard</button>
+      <button class="tab" data-view="upload">Upload CVs</button>
+      <button class="tab" data-view="candidates">Candidates <span id="pendingBadge" class="badge hidden"></span></button>
+      <button class="tab" data-view="performance">Performance</button>
+    </nav>
+    <div class="links">
+      <span id="n8nStatus" class="dot" title="n8n status"></span>
+      <a id="n8nLink" href="http://localhost:5678" target="_blank" rel="noopener">n8n</a>
+      <a id="mailLink" href="http://localhost:8025" target="_blank" rel="noopener">Mailbox</a>
+    </div>
+  </header>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section id="view-dashboard" class="view active">
+      <div class="position">
+        <div>
+          <h1>Junior Operations Analyst</h1>
+          <p class="muted">Open position · CVs are scored by the AI agent, the final decision always stays with HR.</p>
+        </div>
+        <button class="btn primary" data-goto="upload">+ Upload CVs</button>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><span>CVs processed</span><strong id="kTotal">0</strong><small id="kProcessing"></small></div>
+        <div class="kpi accent"><span>Invite to interview</span><strong id="kInterview">0</strong><small>score ≥ 75</small></div>
+        <div class="kpi"><span>Consider</span><strong id="kConsider">0</strong><small>score 60–74</small></div>
+        <div class="kpi"><span>Not a fit</span><strong id="kReject">0</strong><small>score &lt; 60</small></div>
+        <div class="kpi warn"><span>Manual review</span><strong id="kManual">0</strong><small>unreadable / error</small></div>
+        <div class="kpi"><span>Avg. time per CV</span><strong id="kAvg">–</strong><small>end-to-end</small></div>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="card-head">
+            <h2>Waiting for your approval</h2>
+            <button class="btn ghost small" data-goto="candidates">All candidates →</button>
+          </div>
+          <div id="pendingList" class="list"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>How it works</h2></div>
+          <ol class="steps">
+            <li><b>Upload</b> PDF CVs here, or drop them into the <code>inbox/incoming</code> folder.</li>
+            <li><b>n8n</b> extracts the text and the <b>Gemini</b> agent scores it against the job ad.</li>
+            <li>A <b>code rule</b> (not the AI) sets the decision from the score.</li>
+            <li>For interview candidates n8n writes <b>5 tailored questions</b> and an <b>invitation draft</b>.</li>
+            <li>You <b>approve or reject</b>. Nothing is sent to a candidate without your approval.</li>
+          </ol>
+          <div class="card-head"><h2>System alerts</h2></div>
+          <div id="alerts" class="alerts"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- UPLOAD -->
+    <section id="view-upload" class="view">
+      <div class="card">
+        <h2>Upload CVs</h2>
+        <p class="muted">PDF only, up to 50 files at a time. Each CV is processed in the background; results appear on the Candidates tab within seconds.</p>
+        <label id="drop" class="drop">
+          <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple />
+          <div class="drop-icon">⬆</div>
+          <strong>Drag &amp; drop PDF CVs here</strong>
+          <span class="muted">or click to choose files</span>
+        </label>
+        <div id="uploadResult" class="upload-result"></div>
+        <div class="hint">
+          <b>Alternative trigger:</b> copy PDFs into <code>inbox/incoming/</code> in the project folder. The panel picks them up automatically within a few seconds (the local equivalent of the Google Drive folder trigger in the brief).
+        </div>
+      </div>
+    </section>
+
+    <!-- CANDIDATES -->
+    <section id="view-candidates" class="view">
+      <div class="card">
+        <div class="card-head">
+          <h2>Results table</h2>
+          <div class="toolbar">
+            <select id="filter">
+              <option value="">All decisions</option>
+              <option value="interview">Interview</option>
+              <option value="consider">Consider</option>
+              <option value="reject">Not a fit</option>
+              <option value="manual_review">Manual review</option>
+              <option value="processing">Processing</option>
+              <option value="pending">Waiting for approval</option>
+            </select>
+            <a class="btn ghost small" href="/api/export.csv">Export CSV</a>
+            <button id="resetBtn" class="btn ghost small danger">Reset demo data</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Candidate</th><th>Score</th><th>Decision</th><th>Approval</th><th>Mail</th><th>Time</th><th>Received</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <p id="emptyRows" class="empty hidden">No CVs yet. Upload a few from the <b>Upload CVs</b> tab, sample CVs are in <code>samples/</code>.</p>
+      </div>
+    </section>
+
+    <!-- PERFORMANCE -->
+    <section id="view-performance" class="view">
+      <div class="card">
+        <h2>Before vs. after automation</h2>
+        <p class="muted">Live numbers from this session's processed CVs, compared with the manual (AS-IS) process. The AS-IS times are assumptions you can replace with your own measurements in <code>.env</code>.</p>
+        <div class="compare" id="compare"></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h2>Time per CV</h2>
+          <div id="timeBars" class="bars"></div>
+        </div>
+        <div class="card">
+          <h2>Decision distribution</h2>
+          <div id="distBars" class="bars"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Assumptions used</h2>
+        <div id="assumptions" class="assumptions"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- CANDIDATE DRAWER -->
+  <div id="drawerBackdrop" class="backdrop hidden"></div>
+  <aside id="drawer" class="drawer hidden" aria-hidden="true">
+    <button class="close" id="drawerClose" aria-label="Close">×</button>
+    <div id="drawerBody"></div>
+  </aside>
+
+  <!-- CONFIRM DIALOG (in-page, no browser alerts) -->
+  <div id="confirm" class="modal hidden">
+    <div class="modal-box">
+      <p id="confirmText"></p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="confirmNo">Cancel</button>
+        <button class="btn primary" id="confirmYes">Yes</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

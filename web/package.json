@@ -1,0 +1,17 @@
+{
+  "name": "ekomino-hr-panel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Ekomino CV Screening — web panel for HR specialists (the end-user interface of the n8n workflow)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "multer": "^2.0.2"
+  }
+}

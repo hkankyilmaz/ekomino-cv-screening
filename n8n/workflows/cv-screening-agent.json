@@ -1,0 +1,599 @@
+{
+  "id": "EkominoCvScreen1",
+  "name": "Ekomino · CV Screening Agent",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cv-screening",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000001",
+      "name": "CV Received",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "5d0c6f7e-3e01-4c0a-9a1e-0c5c2ee0e001"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n//  SETTINGS — the only place you need to edit to change behaviour\n//  (thresholds, test mode, addresses, job ad). FR-5 / FR-11.\n// ============================================================\nconst SETTINGS = {\n  // Decision thresholds (inclusive, applied by code — not by the AI)\n  THRESHOLD_INTERVIEW: 75,   // score >= 75  -> \"interview\"\n  THRESHOLD_CONSIDER: 60,    // score 60-74  -> \"consider\", below 60 -> \"reject\"\n\n  // Test mode: when true, every candidate mail goes to TEST_RECIPIENT instead\n  TEST_MODE: true,\n  TEST_RECIPIENT: \"test-inbox@ekomino.local\",\n\n  HR_EMAIL: \"hr@ekomino.local\",\n  SENDER_EMAIL: \"Ekomino HR <hr@ekomino.local>\",\n\n  // Google Gemini model used by the AI agent\n  GEMINI_MODEL: \"gemini-2.5-flash\",\n\n  // Web panel addresses (internal = inside Docker, public = in your browser)\n  PANEL_INTERNAL_URL: \"http://web:3000\",\n  PANEL_PUBLIC_URL: \"http://localhost:3000\",\n\n  // Job ad — a parameter, so the same workflow can screen for any position\n  JOB_TITLE: \"Junior Operations Analyst\",\n  JOB_REQUIREMENTS: [\n    \"Bachelor's degree in Industrial Engineering, Business Administration or a related engineering field\",\n    \"Advanced Excel (pivot tables, formulas), basic SQL\",\n    \"Power BI or Python is a plus\",\n    \"English at B1 level or above\",\n    \"0-2 years of experience or internships\",\n  ],\n};\n\n// Pass the uploaded CV (binary) and the form fields through, with the settings attached.\nreturn $input.all().map((item) => ({\n  json: { ...item.json, settings: SETTINGS },\n  binary: item.binary,\n}));\n"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000002",
+      "name": "Settings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "cv",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000003",
+      "name": "Extract PDF Text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Builds the Gemini request: system prompt (Annex A of the brief) + CV text + strict JSON schema.\nconst S = $('Settings').first().json.settings;\nconst cvText = String($json.text || '').replace(/\\s+\\n/g, '\\n').trim();\n\n// A scanned (image-only) or broken PDF has no text: send it to manual review instead of the AI.\nif (cvText.length < 80) {\n  throw new Error('CV text could not be read (empty or image-only PDF)');\n}\n\nconst systemPrompt = `You are an experienced HR pre-screening assistant for Ekomino, a toy manufacturing company.\nScore the given CV against the JOB AD criteria below.\n\nJOB AD: ${S.JOB_TITLE}\n${S.JOB_REQUIREMENTS.map((r) => '- ' + r).join('\\n')}\n\nScore weights (total 100): education 20, technical 35, experience 25, language 10, projects 10.\n\nRules:\n- Do NOT take name, gender, age, photo or marital status into account when scoring.\n- Do not invent anything that is not written in the CV; if unsure, give a lower score.\n- Each sub-score must stay within its weight; score must equal the sum of the sub-scores.\n- decision: \"interview\" if score >= ${S.THRESHOLD_INTERVIEW}, \"consider\" if ${S.THRESHOLD_CONSIDER}-${S.THRESHOLD_INTERVIEW - 1}, otherwise \"reject\".\n- email: the e-mail address written in the CV; empty string if there is none.\n- strengths / gaps: at most 15 words each.\n- interview_questions: ONLY if decision is \"interview\", otherwise \"\".\n  Write 5 questions specific to THIS candidate's CV: 2 technical (based on the tools and\n  projects in the CV), 1 experience, 1 case / problem solving, 1 behavioural.\n  Number them \"1) ... 2) ...\" on separate lines. NEVER ask about age, marital status,\n  family plans, religion or any other non-job-related topic.\n- The CV may be written in Turkish or English. Always answer in English.\n- Answer ONLY with JSON in the required schema, no other text.`;\n\nconst responseSchema = {\n  type: 'OBJECT',\n  properties: {\n    candidate: { type: 'STRING' },\n    email: { type: 'STRING' },\n    score: { type: 'INTEGER' },\n    sub_scores: {\n      type: 'OBJECT',\n      properties: {\n        education: { type: 'INTEGER' },\n        technical: { type: 'INTEGER' },\n        experience: { type: 'INTEGER' },\n        language: { type: 'INTEGER' },\n        projects: { type: 'INTEGER' },\n      },\n      required: ['education', 'technical', 'experience', 'language', 'projects'],\n    },\n    strengths: { type: 'STRING' },\n    gaps: { type: 'STRING' },\n    decision: { type: 'STRING', enum: ['interview', 'consider', 'reject'] },\n    interview_questions: { type: 'STRING' },\n  },\n  required: ['candidate', 'email', 'score', 'sub_scores', 'strengths', 'gaps', 'decision', 'interview_questions'],\n};\n\nreturn [{\n  json: {\n    request: {\n      systemInstruction: { parts: [{ text: systemPrompt }] },\n      contents: [{ role: 'user', parts: [{ text: 'CV TEXT:\\n' + cvText.slice(0, 30000) }] }],\n      generationConfig: {\n        temperature: 0,\n        responseMimeType: 'application/json',\n        responseSchema,\n      },\n    },\n  },\n}];\n"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000004",
+      "name": "Build AI Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/{{ $('Settings').first().json.settings.GEMINI_MODEL }}:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000005",
+      "name": "Gemini · Score CV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ekominoGeminiKey",
+          "name": "Gemini API Key"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validation & decision (Annex C of the brief).\n// The AI only proposes sub-scores; the total and the decision are recomputed HERE by code,\n// so a model mistake can never put a candidate in the wrong category.\nconst S = $('Settings').first().json.settings;\nconst form = $('CV Received').first().json.body || {};\nconst MAX = { education: 20, technical: 35, experience: 25, language: 10, projects: 10 };\n\nconst input = $input.first().json;\nlet data = null;\nlet error = null;\n\nif (input.error) {\n  // Came from an error output (PDF extraction / request build / Gemini call failed)\n  error = typeof input.error === 'string' ? input.error : (input.error.message || JSON.stringify(input.error));\n  // Make API errors readable, e.g. 'Gemini API error 429: Resource has been exhausted'\n  const api = String(error).replace(/\\\\\"/g, '\"').match(/^(\\d{3}) - [\\s\\S]*?\"message\":\\s*\"([^\"]+)\"/);\n  if (api) error = 'Gemini API error ' + api[1] + ': ' + api[2];\n} else {\n  const raw = (input.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');\n  try {\n    data = JSON.parse(raw.replace(/```json|```/g, '').trim());\n  } catch (e) {\n    error = 'The AI answer was not valid JSON' + (raw ? ': ' + raw.slice(0, 120) : ' (empty answer)');\n  }\n  if (data && (typeof data !== 'object' || !data.sub_scores)) {\n    error = 'The AI answer did not match the expected schema';\n    data = null;\n  }\n}\n\nconst base = {\n  record_id: Number(form.record_id),\n  file_name: form.file_name || '',\n  execution_id: $execution.id,\n  resume_url: $execution.resumeUrl,\n};\n\nif (!data) {\n  return [{ json: { ...base, decision: 'manual_review', error: String(error).slice(0, 500) } }];\n}\n\nconst sub = {};\nfor (const [k, max] of Object.entries(MAX)) {\n  const v = Math.round(Number(data.sub_scores[k]) || 0);\n  sub[k] = Math.min(max, Math.max(0, v));\n}\nconst score = Object.values(sub).reduce((a, b) => a + b, 0);\nconst decision =\n  score >= S.THRESHOLD_INTERVIEW ? 'interview' :\n  score >= S.THRESHOLD_CONSIDER ? 'consider' : 'reject';\n\nconst email = String(data.email || '').trim();\nreturn [{\n  json: {\n    ...base,\n    candidate: String(data.candidate || '').trim() || 'Unknown candidate',\n    email: /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email) ? email : '',\n    score,\n    model_score: data.score,          // what the AI said, kept for transparency\n    model_decision: data.decision,\n    sub_scores: sub,\n    strengths: String(data.strengths || ''),\n    gaps: String(data.gaps || ''),\n    decision,\n    interview_questions: decision === 'interview' ? String(data.interview_questions || '') : '',\n    error: null,\n  },\n}];\n"
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000006",
+      "name": "Validate & Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1b2c3d4-0000-4000-8000-000000000007",
+              "name": "mail_subject",
+              "type": "string",
+              "value": "=Interview Invitation | {{ $('Settings').first().json.settings.JOB_TITLE }} — Ekomino"
+            },
+            {
+              "id": "a1b2c3d4-0000-4000-8000-000000000008",
+              "name": "mail_body",
+              "type": "string",
+              "value": "=Hello {{ $json.candidate }},\n\nThank you for applying for the {{ $('Settings').first().json.settings.JOB_TITLE }} position at Ekomino. Your application has been positively evaluated in our pre-screening and we would like to invite you to an interview.\n\nCould you reply to this e-mail with two days and time slots that suit you next week? We will then schedule the interview.\n\nKind regards,\nEkomino Human Resources"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000009",
+      "name": "Prepare Mail Draft",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Settings').first().json.settings.PANEL_INTERNAL_URL }}/api/n8n/result",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000010",
+      "name": "Save to Results Table",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true, record_id: $('Validate & Decide').first().json.record_id, decision: $('Validate & Decide').first().json.decision, score: $('Validate & Decide').first().json.score ?? null }) }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000011",
+      "name": "Respond to Panel",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1b2c3d4-0000-4000-8000-000000000012",
+              "leftValue": "={{ $('Validate & Decide').first().json.decision }}",
+              "rightValue": "interview",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000013",
+      "name": "Interview?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1980,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Settings').first().json.settings.SENDER_EMAIL }}",
+        "toEmail": "={{ $('Settings').first().json.settings.HR_EMAIL }}",
+        "subject": "=[Approval needed] Interview invitation · {{ $('Validate & Decide').first().json.candidate }} ({{ $('Validate & Decide').first().json.score }}/100)",
+        "emailFormat": "text",
+        "text": "=An interview invitation is waiting for your approval.\n\nCandidate : {{ $('Validate & Decide').first().json.candidate }} ({{ $('Validate & Decide').first().json.email || 'no e-mail in CV' }})\nCV file   : {{ $('Validate & Decide').first().json.file_name }}\nScore     : {{ $('Validate & Decide').first().json.score }} / 100\n  education {{ $('Validate & Decide').first().json.sub_scores.education }}/20 · technical {{ $('Validate & Decide').first().json.sub_scores.technical }}/35 · experience {{ $('Validate & Decide').first().json.sub_scores.experience }}/25 · language {{ $('Validate & Decide').first().json.sub_scores.language }}/10 · projects {{ $('Validate & Decide').first().json.sub_scores.projects }}/10\nStrengths : {{ $('Validate & Decide').first().json.strengths }}\nGaps      : {{ $('Validate & Decide').first().json.gaps }}\n\nTailored interview questions:\n{{ $('Validate & Decide').first().json.interview_questions }}\n\n---------------- Draft mail to the candidate ----------------\nSubject: {{ $('Prepare Mail Draft').first().json.mail_subject }}\n\n{{ $('Prepare Mail Draft').first().json.mail_body }}\n--------------------------------------------------------------\n\nApprove or reject it in the HR panel:\n{{ $('Settings').first().json.settings.PANEL_PUBLIC_URL }}/#candidate-{{ $('Validate & Decide').first().json.record_id }}\n\nNothing is sent to the candidate until you approve. If there is no answer within 48 hours, the request expires.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000014",
+      "name": "Ask HR for Approval",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2200,
+        200
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "ekominoMailpitSmtp",
+          "name": "Mailpit SMTP (local)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 48,
+        "resumeUnit": "hours",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000015",
+      "name": "Wait for HR Decision",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        200
+      ],
+      "webhookId": "7a3e9b2c-3e02-4d1b-8c3f-0a99a0e0a002"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a1b2c3d4-0000-4000-8000-000000000016",
+              "leftValue": "={{ $json.body?.approved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000017",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Settings').first().json.settings.SENDER_EMAIL }}",
+        "toEmail": "={{ $('Settings').first().json.settings.TEST_MODE ? $('Settings').first().json.settings.TEST_RECIPIENT : $('Validate & Decide').first().json.email }}",
+        "subject": "={{ $('Prepare Mail Draft').first().json.mail_subject }}",
+        "emailFormat": "text",
+        "text": "={{ $('Wait for HR Decision').first().json.body.mail_body || $('Prepare Mail Draft').first().json.mail_body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000018",
+      "name": "Send Invitation to Candidate",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2860,
+        100
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "ekominoMailpitSmtp",
+          "name": "Mailpit SMTP (local)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Settings').first().json.settings.PANEL_INTERNAL_URL }}/api/n8n/status",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ (() => {\n  const answer = $('Wait for HR Decision').first().json.body;\n  const approved = answer?.approved === true;\n  return JSON.stringify({\n    record_id: $('Validate & Decide').first().json.record_id,\n    approval_status: approved ? 'Approved' : (answer ? 'Rejected' : 'Timed out'),\n    mail_status: approved ? 'Sent' : 'Not sent',\n    mail_sent_at: approved ? $now.toISO() : null,\n    mail_recipient: approved ? ($('Settings').first().json.settings.TEST_MODE ? $('Settings').first().json.settings.TEST_RECIPIENT : $('Validate & Decide').first().json.email) : null,\n  });\n})() }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000019",
+      "name": "Update Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        220
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "content": "## 1 · Intake\nThe HR panel posts each PDF here (upload or `inbox/incoming` folder). **Settings** holds thresholds, test mode, addresses and the job ad.",
+        "width": 440,
+        "height": 200,
+        "color": 7
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000020",
+      "name": "Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2 · AI scoring\nText is extracted from the PDF and sent to **Google Gemini** (temperature 0, strict JSON schema). Any failure goes down the red *error* outputs into manual review — the flow never crashes.",
+        "width": 440,
+        "height": 200,
+        "color": 4
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000021",
+      "name": "Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        620,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3 · Decision by code\nSub-scores are clamped to their weights, the total is recomputed and the decision is set by thresholds — **not** by the AI. Every candidate is written to the results table.",
+        "width": 680,
+        "height": 160,
+        "color": 5
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000022",
+      "name": "Note 3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1060,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4 · Human approval\nOnly *interview* candidates continue. HR gets the summary + questions + draft; the execution **waits** (max 48 h) for Approve / Reject from the panel. Mail goes out only after approval (test mode → test inbox).",
+        "width": 700,
+        "height": 200,
+        "color": 6
+      },
+      "id": "a1b2c3d4-0000-4000-8000-000000000023",
+      "name": "Note 4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        -120
+      ]
+    }
+  ],
+  "connections": {
+    "CV Received": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text": {
+      "main": [
+        [
+          {
+            "node": "Build AI Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validate & Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Request": {
+      "main": [
+        [
+          {
+            "node": "Gemini · Score CV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validate & Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini · Score CV": {
+      "main": [
+        [
+          {
+            "node": "Validate & Decide",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validate & Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Decide": {
+      "main": [
+        [
+          {
+            "node": "Prepare Mail Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Mail Draft": {
+      "main": [
+        [
+          {
+            "node": "Save to Results Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Results Table": {
+      "main": [
+        [
+          {
+            "node": "Respond to Panel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Panel": {
+      "main": [
+        [
+          {
+            "node": "Interview?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interview?": {
+      "main": [
+        [
+          {
+            "node": "Ask HR for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Ask HR for Approval": {
+      "main": [
+        [
+          {
+            "node": "Wait for HR Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for HR Decision": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Send Invitation to Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Invitation to Candidate": {
+      "main": [
+        [
+          {
+            "node": "Update Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "EkominoErrorHnd1",
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "tags": []
+}
