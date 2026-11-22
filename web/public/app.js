@@ -14,6 +14,7 @@ let candidates = [];
 let stats = null;
 let openId = null;
 let drawerDirty = false;
+let lastDrawerKey = "";
 
 // ---------- helpers ----------
 const esc = (s) =>
@@ -114,7 +115,11 @@ function renderAll() {
   renderDashboard();
   renderTable();
   renderPerformance();
-  if (openId && !drawerDirty) renderDrawer(openId);
+  if (openId && !drawerDirty) {
+    const c = candidates.find((x) => x.id === openId);
+    const key = c ? JSON.stringify(c) + LANG : "";
+    if (key !== lastDrawerKey) renderDrawer(openId);
+  }
 }
 
 async function refreshSlow() {
@@ -175,6 +180,7 @@ function renderTable() {
       <td>${mailChip(c)}</td>
       <td class="muted">${secs(c.processing_ms)}</td>
       <td class="muted">${time(c.uploaded_at)}</td>
+      <td><a class="btn ghost small cv-btn" href="/api/candidates/${c.id}/cv" target="_blank" rel="noopener" title="${esc(t("cvOpenTitle"))}">📄 ${t("thCv")}</a></td>
     </tr>`
     )
     .join("");
@@ -182,6 +188,7 @@ function renderTable() {
 $("#filter").onchange = renderTable;
 
 document.addEventListener("click", (e) => {
+  if (e.target.closest("a")) return; // e.g. the CV button opens the PDF, not the drawer
   const row = e.target.closest("[data-open]");
   if (row) openDrawer(Number(row.dataset.open));
 });
@@ -213,6 +220,7 @@ document.addEventListener("keydown", (e) => e.key === "Escape" && closeDrawer())
 function renderDrawer(id) {
   const c = candidates.find((x) => x.id === id);
   if (!c) return;
+  lastDrawerKey = JSON.stringify(c) + LANG;
   const done = c.decision !== "processing";
   const subs = SUB_SCORES.map(
     ([k, max]) => `
@@ -259,6 +267,11 @@ function renderDrawer(id) {
     ${c.strengths || c.gaps ? `<div class="d-section pairs">
         <div class="pair"><b>${t("strengths")}</b>${esc(c.strengths || "–")}</div>
         <div class="pair"><b>${t("gaps")}</b>${esc(c.gaps || "–")}</div></div>` : ""}
+    <details class="d-section cv-preview" open>
+      <summary><h3>${t("cvPreview")}</h3>
+        <a href="/api/candidates/${c.id}/cv" target="_blank" rel="noopener">${t("cvOpenNew")}</a></summary>
+      <iframe class="cv-frame" src="/api/candidates/${c.id}/cv#view=FitH&toolbar=0" title="${esc(t("cvPreview"))}"></iframe>
+    </details>
     ${c.interview_questions ? `<div class="d-section"><h3>${t("questions")}</h3><div class="questions">${esc(c.interview_questions)}</div></div>` : ""}
     ${approval}
     <div class="d-section meta">

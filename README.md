@@ -392,7 +392,8 @@ project; they are picked up automatically within a few seconds and moved to `inb
 
 
 ### 8.3 Candidates (results table)
-One row per CV: candidate, score, decision, approval status, mail status, processing time.
+One row per CV: candidate, score, decision, approval status, mail status, processing time, and a
+**📄 CV** button that opens the original PDF in a new tab.
 Filter by decision or "waiting for approval", **Export CSV** (same columns as the brief's
 Google Sheet), or **Reset demo data** before a presentation.
 
@@ -403,7 +404,8 @@ Click a row to open the detail drawer (real output of the agent for sample candi
 * **tailored interview questions** (interview candidates only),
 * the **invitation draft**, which you can edit,
 * **Approve & send invitation** or **Reject (do not send)**,
-* a link to open the original CV.
+* a **CV preview**: the original PDF is shown right below the scores, so HR can check the AI's
+  assessment against the CV side by side (collapsible, or open it in a new tab).
 
 <p align="center"><img src="docs/images/approval.png" alt="Candidate detail and approval" width="900"></p>
 
