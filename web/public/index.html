@@ -13,19 +13,23 @@
       <span class="logo">E</span>
       <div>
         <strong>Ekomino</strong>
-        <small>HR · CV Screening Agent</small>
+        <small data-i18n="brandSub">HR · CV Screening Agent</small>
       </div>
     </div>
     <nav class="tabs" role="tablist">
-      <button class="tab active" data-view="dashboard">Dashboard</button>
-      <button class="tab" data-view="upload">Upload CVs</button>
-      <button class="tab" data-view="candidates">Candidates <span id="pendingBadge" class="badge hidden"></span></button>
-      <button class="tab" data-view="performance">Performance</button>
+      <button class="tab active" data-view="dashboard" data-i18n="tabDashboard">Dashboard</button>
+      <button class="tab" data-view="upload" data-i18n="tabUpload">Upload CVs</button>
+      <button class="tab" data-view="candidates"><span data-i18n="tabCandidates">Candidates</span> <span id="pendingBadge" class="badge hidden"></span></button>
+      <button class="tab" data-view="performance" data-i18n="tabPerformance">Performance</button>
     </nav>
     <div class="links">
-      <span id="n8nStatus" class="dot" title="n8n status"></span>
+      <span id="n8nStatus" class="dot" title="n8n"></span>
       <a id="n8nLink" href="http://localhost:5678" target="_blank" rel="noopener">n8n</a>
-      <a id="mailLink" href="http://localhost:8025" target="_blank" rel="noopener">Mailbox</a>
+      <a id="mailLink" href="http://localhost:8025" target="_blank" rel="noopener" data-i18n="mailbox">Mailbox</a>
+      <div class="lang" role="group" aria-label="Language">
+        <button data-lang="tr">TR</button>
+        <button data-lang="en">EN</button>
+      </div>
     </div>
   </header>
 
@@ -34,39 +38,33 @@
     <section id="view-dashboard" class="view active">
       <div class="position">
         <div>
-          <h1>Junior Operations Analyst</h1>
-          <p class="muted">Open position · CVs are scored by the AI agent, the final decision always stays with HR.</p>
+          <h1 data-i18n="jobTitle">Junior Operations Analyst</h1>
+          <p class="muted" data-i18n="positionSub">Open position · CVs are scored by the AI agent, the final decision always stays with HR.</p>
         </div>
-        <button class="btn primary" data-goto="upload">+ Upload CVs</button>
+        <button class="btn primary" data-goto="upload" data-i18n="uploadBtn">+ Upload CVs</button>
       </div>
 
       <div class="kpis">
-        <div class="kpi"><span>CVs processed</span><strong id="kTotal">0</strong><small id="kProcessing"></small></div>
-        <div class="kpi accent"><span>Invite to interview</span><strong id="kInterview">0</strong><small>score ≥ 75</small></div>
-        <div class="kpi"><span>Consider</span><strong id="kConsider">0</strong><small>score 60–74</small></div>
-        <div class="kpi"><span>Not a fit</span><strong id="kReject">0</strong><small>score &lt; 60</small></div>
-        <div class="kpi warn"><span>Manual review</span><strong id="kManual">0</strong><small>unreadable / error</small></div>
-        <div class="kpi"><span>Avg. time per CV</span><strong id="kAvg">–</strong><small>end-to-end</small></div>
+        <div class="kpi"><span data-i18n="kpiProcessed">CVs processed</span><strong id="kTotal">0</strong><small id="kProcessing"></small></div>
+        <div class="kpi accent"><span data-i18n="kpiInterview">Invite to interview</span><strong id="kInterview">0</strong><small data-i18n="kpiInterviewSub">score ≥ 75</small></div>
+        <div class="kpi"><span data-i18n="kpiConsider">Consider</span><strong id="kConsider">0</strong><small data-i18n="kpiConsiderSub">score 60–74</small></div>
+        <div class="kpi"><span data-i18n="kpiReject">Not a fit</span><strong id="kReject">0</strong><small data-i18n="kpiRejectSub">score &lt; 60</small></div>
+        <div class="kpi warn"><span data-i18n="kpiManual">Manual review</span><strong id="kManual">0</strong><small data-i18n="kpiManualSub">unreadable / error</small></div>
+        <div class="kpi"><span data-i18n="kpiAvg">Avg. time per CV</span><strong id="kAvg">–</strong><small data-i18n="kpiAvgSub">end-to-end</small></div>
       </div>
 
       <div class="grid2">
         <div class="card">
           <div class="card-head">
-            <h2>Waiting for your approval</h2>
-            <button class="btn ghost small" data-goto="candidates">All candidates →</button>
+            <h2 data-i18n="pendingTitle">Waiting for your approval</h2>
+            <button class="btn ghost small" data-goto="candidates" data-i18n="allCandidates">All candidates →</button>
           </div>
           <div id="pendingList" class="list"></div>
         </div>
         <div class="card">
-          <div class="card-head"><h2>How it works</h2></div>
-          <ol class="steps">
-            <li><b>Upload</b> PDF CVs here, or drop them into the <code>inbox/incoming</code> folder.</li>
-            <li><b>n8n</b> extracts the text and the <b>Gemini</b> agent scores it against the job ad.</li>
-            <li>A <b>code rule</b> (not the AI) sets the decision from the score.</li>
-            <li>For interview candidates n8n writes <b>5 tailored questions</b> and an <b>invitation draft</b>.</li>
-            <li>You <b>approve or reject</b>. Nothing is sent to a candidate without your approval.</li>
-          </ol>
-          <div class="card-head"><h2>System alerts</h2></div>
+          <div class="card-head"><h2 data-i18n="howTitle">How it works</h2></div>
+          <ol class="steps" data-i18n-html="howSteps"></ol>
+          <div class="card-head"><h2 data-i18n="alertsTitle">System alerts</h2></div>
           <div id="alerts" class="alerts"></div>
         </div>
       </div>
@@ -75,18 +73,16 @@
     <!-- UPLOAD -->
     <section id="view-upload" class="view">
       <div class="card">
-        <h2>Upload CVs</h2>
-        <p class="muted">PDF only, up to 50 files at a time. Each CV is processed in the background; results appear on the Candidates tab within seconds.</p>
+        <h2 data-i18n="uploadTitle">Upload CVs</h2>
+        <p class="muted" data-i18n="uploadSub">PDF only, up to 50 files at a time. Each CV is processed in the background; results appear on the Candidates tab within seconds.</p>
         <label id="drop" class="drop">
           <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple />
           <div class="drop-icon">⬆</div>
-          <strong>Drag &amp; drop PDF CVs here</strong>
-          <span class="muted">or click to choose files</span>
+          <strong data-i18n="dropTitle">Drag &amp; drop PDF CVs here</strong>
+          <span class="muted" data-i18n="dropSub">or click to choose files</span>
         </label>
         <div id="uploadResult" class="upload-result"></div>
-        <div class="hint">
-          <b>Alternative trigger:</b> copy PDFs into <code>inbox/incoming/</code> in the project folder. The panel picks them up automatically within a few seconds (the local equivalent of the Google Drive folder trigger in the brief).
-        </div>
+        <div class="hint" data-i18n-html="folderHint"></div>
       </div>
     </section>
 
@@ -94,54 +90,61 @@
     <section id="view-candidates" class="view">
       <div class="card">
         <div class="card-head">
-          <h2>Results table</h2>
+          <h2 data-i18n="tableTitle">Results table</h2>
           <div class="toolbar">
             <select id="filter">
-              <option value="">All decisions</option>
-              <option value="interview">Interview</option>
-              <option value="consider">Consider</option>
-              <option value="reject">Not a fit</option>
-              <option value="manual_review">Manual review</option>
-              <option value="processing">Processing</option>
-              <option value="pending">Waiting for approval</option>
+              <option value="" data-i18n="fAll">All decisions</option>
+              <option value="interview" data-i18n="d_interview">Interview</option>
+              <option value="consider" data-i18n="d_consider">Consider</option>
+              <option value="reject" data-i18n="d_reject">Not a fit</option>
+              <option value="manual_review" data-i18n="d_manual_review">Manual review</option>
+              <option value="processing" data-i18n="d_processing">Processing</option>
+              <option value="pending" data-i18n="fPending">Waiting for approval</option>
             </select>
-            <a class="btn ghost small" href="/api/export.csv">Export CSV</a>
-            <button id="resetBtn" class="btn ghost small danger">Reset demo data</button>
+            <a class="btn ghost small" href="/api/export.csv" data-i18n="exportCsv">Export CSV</a>
+            <button id="resetBtn" class="btn ghost small danger" data-i18n="resetBtn">Reset demo data</button>
           </div>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>#</th><th>Candidate</th><th>Score</th><th>Decision</th><th>Approval</th><th>Mail</th><th>Time</th><th>Received</th>
+                <th>#</th>
+                <th data-i18n="thCandidate">Candidate</th>
+                <th data-i18n="thScore">Score</th>
+                <th data-i18n="thDecision">Decision</th>
+                <th data-i18n="thApproval">Approval</th>
+                <th data-i18n="thMail">Mail</th>
+                <th data-i18n="thTime">Time</th>
+                <th data-i18n="thReceived">Received</th>
               </tr>
             </thead>
             <tbody id="rows"></tbody>
           </table>
         </div>
-        <p id="emptyRows" class="empty hidden">No CVs yet. Upload a few from the <b>Upload CVs</b> tab, sample CVs are in <code>samples/</code>.</p>
+        <p id="emptyRows" class="empty hidden" data-i18n-html="emptyRows"></p>
       </div>
     </section>
 
     <!-- PERFORMANCE -->
     <section id="view-performance" class="view">
       <div class="card">
-        <h2>Before vs. after automation</h2>
-        <p class="muted">Live numbers from this session's processed CVs, compared with the manual (AS-IS) process. The AS-IS times are assumptions you can replace with your own measurements in <code>.env</code>.</p>
+        <h2 data-i18n="perfTitle">Before vs. after automation</h2>
+        <p class="muted" data-i18n-html="perfSub"></p>
         <div class="compare" id="compare"></div>
       </div>
       <div class="grid2">
         <div class="card">
-          <h2>Time per CV</h2>
+          <h2 data-i18n="timeTitle">Time per CV</h2>
           <div id="timeBars" class="bars"></div>
         </div>
         <div class="card">
-          <h2>Decision distribution</h2>
+          <h2 data-i18n="distTitle">Decision distribution</h2>
           <div id="distBars" class="bars"></div>
         </div>
       </div>
       <div class="card">
-        <h2>Assumptions used</h2>
+        <h2 data-i18n="assumpTitle">Assumptions used</h2>
         <div id="assumptions" class="assumptions"></div>
       </div>
     </section>
@@ -159,14 +162,15 @@
     <div class="modal-box">
       <p id="confirmText"></p>
       <div class="modal-actions">
-        <button class="btn ghost" id="confirmNo">Cancel</button>
-        <button class="btn primary" id="confirmYes">Yes</button>
+        <button class="btn ghost" id="confirmNo" data-i18n="cancel">Cancel</button>
+        <button class="btn primary" id="confirmYes" data-i18n="yes">Yes</button>
       </div>
     </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
 
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

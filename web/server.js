@@ -39,7 +39,7 @@ const BASELINE = {
 
 // ---------------------------------------------------------------------------
 // Processing queue: CVs are sent to n8n one by one (at most CONCURRENCY in parallel),
-// so uploading 30 CVs at once does not exceed the Gemini API rate limit.
+// so uploading 30 CVs at once does not exceed the Claude API rate limit.
 // ---------------------------------------------------------------------------
 const queue = [];
 let running = 0;

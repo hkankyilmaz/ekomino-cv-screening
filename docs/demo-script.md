@@ -6,7 +6,7 @@
 
 - [ ] Laptop charged, Docker Desktop running, `docker compose up -d` done **15 min before**
 - [ ] `docker compose ps` shows 3 services *running/healthy*
-- [ ] Gemini key valid: run `./scripts/run-acceptance-test.sh --reset` once, then **Reset demo data** in the panel
+- [ ] Claude API key valid and has credit: run `./scripts/run-acceptance-test.sh --reset` once, then **Reset demo data** in the panel
 - [ ] Browser tabs open, in this order: **HR Panel** (localhost:3000) · **n8n workflow** (localhost:5678) · **Mailbox** (localhost:8025)
 - [ ] n8n owner account created and logged in; workflow canvas zoomed to fit
 - [ ] `samples/` folder open in Finder/Explorer for drag & drop

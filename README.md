@@ -1,6 +1,6 @@
 # Ekomino CV Screening Agent
 
-**An AI agent that reads, scores and pre-screens job applications for the HR team of Ekomino (a toy manufacturer), built with n8n and Google Gemini, with a simple web panel where HR stays in control of every decision.**
+**An AI agent that reads, scores and pre-screens job applications for the HR team of Ekomino (a toy manufacturer), built with n8n and Anthropic's Claude (Sonnet 5.5), with a simple web panel where HR stays in control of every decision.**
 
 > Management Information Systems (MIS), course application project.
 > This is **not** a software development assignment. It is an MIS study: we analysed a real
@@ -16,7 +16,7 @@
 1. [Team](#1-team)
 2. [The business problem (AS-IS)](#2-the-business-problem-as-is)
 3. [Our solution (TO-BE) at a glance](#3-our-solution-to-be-at-a-glance)
-4. [Why an AI agent, and why n8n + Gemini?](#4-why-an-ai-agent-and-why-n8n--gemini)
+4. [Why an AI agent, and why n8n + Claude?](#4-why-an-ai-agent-and-why-n8n--claude)
 5. [System architecture](#5-system-architecture)
 6. [How it works, step by step](#6-how-it-works-step-by-step)
 7. [Installation (run it locally)](#7-installation-run-it-locally)
@@ -90,7 +90,7 @@ Full analysis, with the process map and how the time estimates were made: **[doc
 ```mermaid
 flowchart LR
     A[CV uploaded in the panel<br/>or dropped in a folder] --> B[n8n extracts<br/>the text]
-    B --> C[Gemini AI agent scores it<br/>against the job ad<br/>5 sub-scores]
+    B --> C[Claude AI agent scores it<br/>against the job ad<br/>5 sub-scores]
     C --> D[Code recomputes the total<br/>and applies the<br/>decision rule]
     D --> E[(Results table)]
     D --> F{score ≥ 75?}
@@ -118,7 +118,7 @@ flowchart LR
 
 ---
 
-## 4. Why an AI agent, and why n8n + Gemini?
+## 4. Why an AI agent, and why n8n + Claude?
 
 ### RPA or AI agent?
 
@@ -142,20 +142,26 @@ explainable and controllable.
 * Open source and **self-hosted**: it runs in Docker on our own laptop, so CVs are not stored in a third-party automation cloud.
 * Execution history: every run's duration and data can be inspected, which we used for the performance analysis.
 
-### Why Google Gemini (`gemini-2.5-flash`)?
+### Why Claude Sonnet 5.5 (`claude-sonnet-5-5`)?
 
-* Good Turkish **and** English understanding (our CVs are Turkish, the output is English).
-* **Structured output**: we give the API a JSON schema and it must answer in exactly that shape.
-* **Fast and cheap**: a few seconds per CV, a free tier that is enough for the project, and
-  around ₺0.05 per CV on the paid tier.
-* We also considered a local model (Ollama) for privacy. On a laptop a local model is much slower
-  (typically tens of seconds per CV) and weaker in Turkish, so we chose Gemini and handled privacy separately (see §13).
+* Strong reading of Turkish **and** English CVs (our CVs are Turkish, the output is English),
+  and good at following a detailed rubric and fairness rules.
+* **Structured outputs**: we send a JSON schema (`output_config.format`) and the answer is
+  guaranteed to match it, so the workflow can always parse it.
+* **Fast and cheap enough**: 2-5 seconds per CV in our tests, about **$0.006 per CV**
+  (≈ 1,500-1,800 input and 160-440 output tokens; Sonnet 5.5 costs $2 / $10 per million tokens).
+* **Effort control**: `effort: "medium"` is enough for scoring; it can be raised for harder positions.
+* **Refusal fallback**: if a safety classifier ever declines a request, the API re-runs it on a
+  fallback model inside the same call (`fallbacks: "default"`), so a CV is not lost.
+* Alternatives we considered: **Google Gemini** (we started with it, but the model we targeted was
+  closed to new API keys and the newer models were overloaded during our tests) and a **local model
+  (Ollama)** for privacy, which is much slower on a laptop and weaker in Turkish.
 
 ---
 
 ## 5. System architecture
 
-Everything runs on one computer with `docker compose`. Only the scoring call goes to the internet (Gemini API).
+Everything runs on one computer with `docker compose`. Only the scoring call goes to the internet (Claude API).
 
 ```mermaid
 flowchart TB
@@ -174,7 +180,7 @@ flowchart TB
         end
         MAIL[Mailpit · local mail server<br/>SMTP :1025 · inbox UI :8025]
     end
-    GEM[(Google Gemini API)]
+    GEM[(Anthropic Claude API)]
 
     HR -- upload / approve --> UI
     UI --> API
@@ -194,7 +200,7 @@ flowchart TB
 | Component | What it is | Why we need it | Local URL |
 |---|---|---|---|
 | **n8n** | Workflow automation tool (the core of the project) | Runs the whole screening process: extraction, AI, rule, recording, approval, mailing | http://localhost:5678 |
-| **Google Gemini** | Large language model, called through its REST API | Reads and scores the CV, writes interview questions | (cloud) |
+| **Claude Sonnet 5.5** | Anthropic's large language model, called through the Messages API | Reads and scores the CV, writes interview questions | (cloud) |
 | **HR Panel** (`web/`) | Small Node.js web app + SQLite | The end-user screen for HR: upload CVs, see results, approve/reject, export, see gains | http://localhost:3000 |
 | **Mailpit** | Local "fake" mail server with a web inbox | Lets us demo real e-mails safely, so nothing reaches a real person | http://localhost:8025 |
 
@@ -217,8 +223,8 @@ flowchart TB
 | 1 | **CV Received** | Webhook | Receives the PDF + `record_id` from the HR panel (`POST /webhook/cv-screening`) | Trigger: every new CV starts the flow automatically (FR-1) |
 | 2 | **Settings** | Code | One place for thresholds, test mode, addresses, model name and the **job ad** | Change behaviour without touching the logic (FR-5, FR-11) |
 | 3 | **Extract PDF Text** | Extract from File | Turns the PDF into plain text (Turkish characters preserved) | The AI needs text (FR-2). Error output → manual review |
-| 4 | **Build AI Request** | Code | Builds the prompt + strict JSON schema for Gemini; rejects empty/scanned PDFs | Keeps the prompt readable & versioned; cheap early exit |
-| 5 | **Gemini · Score CV** | HTTP Request | Calls `generateContent` with `temperature: 0`, retries 3× on failure | The AI agent itself (FR-3, FR-4) |
+| 4 | **Build AI Request** | Code | Builds the prompt + strict JSON schema for Claude; rejects empty/scanned PDFs | Keeps the prompt readable & versioned; cheap early exit |
+| 5 | **Claude · Score CV** | HTTP Request | Calls the Claude Messages API (`POST /v1/messages`) with structured output, retries 3× on failure | The AI agent itself (FR-3, FR-4) |
 | 6 | **Validate & Decide** | Code | Parses JSON, clamps sub-scores, **recomputes the total**, **applies the decision rule** | The AI proposes, code decides (FR-5); invalid output → `manual_review` |
 | 7 | **Prepare Mail Draft** | Edit Fields (Set) | Fills the invitation template with the candidate's name | Consistent, professional mails (FR-8) |
 | 8 | **Save to Results Table** | HTTP Request | Writes every candidate to the results table via the panel API | Every candidate is recorded, whatever the decision (FR-6) |
@@ -242,14 +248,14 @@ sequenceDiagram
     actor HR as HR specialist
     participant P as HR Panel
     participant N as n8n workflow
-    participant G as Gemini API
+    participant G as Claude API
     participant M as Mailbox (Mailpit)
 
     HR->>P: Upload candidate-B.pdf
     P->>P: Create row (decision = processing)
     P->>N: POST /webhook/cv-screening (PDF, record_id)
     N->>N: Extract PDF text
-    N->>G: generateContent (prompt + CV text + JSON schema, temp 0)
+    N->>G: POST /v1/messages (prompt + CV text + JSON schema)
     G-->>N: {"sub_scores": {...}, "interview_questions": "..."}
     N->>N: Validate, recompute total = 88, decision = interview
     N->>P: POST /api/n8n/result (+ resume URL)
@@ -292,15 +298,19 @@ The full prompt is in the **Build AI Request** node. In short:
 * **Rules:** ignore name, gender, age, photo, marital status; do not invent facts; if unsure score lower;
   questions only for interview candidates: 2 technical, 1 experience, 1 case, 1 behavioural,
   **specific to this CV**; never ask about age, marital status, family plans or religion; answer in English.
-* **Output contract:** a JSON schema passed as `responseSchema` with `responseMimeType: application/json`,
-  plus `temperature: 0` for repeatable results.
+* **Output contract:** a JSON schema passed as `output_config.format` (`type: json_schema`), so the
+  answer always has exactly the fields the workflow expects.
+* **Model settings:** `claude-sonnet-5-5`, `effort: "medium"`. This model does not accept a custom
+  `temperature`; repeatability comes from the fixed rubric, the schema and the code-side decision
+  rule, and we measured it (see the consistency test in the performance analysis).
 
 ### 6.5 Fault tolerance
 
 | What can fail | What happens |
 |---|---|
 | Corrupted / scanned (image-only) PDF | Extract or Build step fails → red error output → `manual_review` with the reason |
-| Gemini API error (no internet, quota, wrong key) | 3 automatic retries, then `manual_review` with a readable reason (`Gemini API error 429: ...`) |
+| Claude API error (no internet, rate limit, wrong key) | 3 automatic retries, then `manual_review` with a readable reason (`Claude API error 429: ...`) |
+| The AI declines to answer (safety classifier) | Fallback model answers inside the same call; if that also declines → `manual_review` |
 | AI answer is not valid JSON | `manual_review` ("The AI answer was not valid JSON") |
 | n8n is down / does not answer | The panel itself marks the CV `manual_review` after a timeout. The CV is never lost |
 | Mail server down, or any unexpected crash | **Error Handler** workflow: alert in the panel + mail to HR; the candidate is flagged for manual handling |
@@ -314,7 +324,7 @@ The full prompt is in the **Build AI Request** node. In short:
 ### Prerequisites
 
 * **Docker Desktop** (Mac / Windows) or Docker Engine + Compose (Linux): https://www.docker.com/products/docker-desktop
-* A **Google Gemini API key** (free): https://aistudio.google.com/apikey
+* An **Anthropic API key** with a few dollars of credit: https://platform.claude.com/settings/keys (screening 100 CVs costs about $0.60)
 * ~1.5 GB free disk space, ports **3000**, **5678** and **8025** free
 
 ### Steps
@@ -324,7 +334,7 @@ The full prompt is in the **Build AI Request** node. In short:
 git clone https://github.com/hkankyilmaz/ekomino-cv-screening.git
 cd ekomino-cv-screening
 
-# 2. Add your Gemini API key
+# 2. Add your Anthropic (Claude) API key
 cp .env.example .env
 #    open .env and replace  paste-your-key-here  with your key
 
@@ -350,7 +360,7 @@ Then open:
 ### What happens at start-up
 
 `n8n/start.sh` runs before n8n starts and:
-1. creates the two **credentials** (Gemini API key from `.env`, local SMTP), stored encrypted inside n8n,
+1. creates the two **credentials** (Claude API key from `.env`, local SMTP), stored encrypted inside n8n,
 2. **imports** the workflows from `n8n/workflows/` (the repo is the single source of truth),
 3. **publishes** (activates) the main workflow and the error handler.
 
@@ -411,7 +421,8 @@ cost, capacity, plus the assumptions used. See §11.
 | `TEST_MODE` | `true` | `true` → every candidate mail goes to `TEST_RECIPIENT` instead of the real candidate |
 | `TEST_RECIPIENT` | `test-inbox@ekomino.local` | Where candidate mails go in test mode |
 | `HR_EMAIL` / `SENDER_EMAIL` | `hr@ekomino.local` | Approval requests go to HR; mails are sent from this address |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Any Gemini model that supports structured output |
+| `AI_MODEL` | `claude-sonnet-5-5` | Claude model used for scoring |
+| `AI_EFFORT` | `medium` | How much the model thinks (`low` / `medium` / `high`); higher = slower and more expensive |
 | `JOB_TITLE`, `JOB_REQUIREMENTS` | Junior Operations Analyst | The job ad the CVs are scored against |
 
 > Changes made in the n8n editor are overwritten on the next restart, because the repo files are
@@ -422,7 +433,7 @@ cost, capacity, plus the assumptions used. See §11.
 
 | Variable | Meaning |
 |---|---|
-| `GEMINI_API_KEY` | Your Gemini API key (never committed, since `.env` is git-ignored) |
+| `ANTHROPIC_API_KEY` | Your Claude API key (never committed, since `.env` is git-ignored) |
 | `ASIS_*`, `TOBE_REVIEW_MIN`, `HR_HOURLY_COST_TRY`, `AI_COST_PER_CV_TRY` | Assumptions for the performance & gain analysis (§11) |
 
 After changing `.env`: `docker compose up -d` (recreates the containers with the new values).
@@ -448,8 +459,11 @@ Run the whole acceptance test with one command:
 ./scripts/run-acceptance-test.sh --reset
 ```
 
-It uploads all five files, waits, and prints actual vs. expected results. Our latest run is
-recorded in [docs/performance-analysis.md](docs/performance-analysis.md#4-measured-results-to-be).
+It uploads all five files, waits, and prints actual vs. expected results.
+
+**Our result (22 Nov 2026, Claude Sonnet 5.5): 5/5 decisions as expected.** A → 88 interview, B → 94 interview,
+C → 14 not a fit, D → 57 not a fit, E → manual review; 2-5 s per CV. Details in
+[docs/performance-analysis.md](docs/performance-analysis.md#4-measured-results-to-be).
 
 **Acceptance checklist (brief §7)**
 
@@ -468,11 +482,11 @@ Summary for one position with **50 applications** (scenario: 10 interview, 10 co
 
 | Indicator | AS-IS (manual) | TO-BE (automated) | Change |
 |---|---|---|---|
-| Time to screen one CV | ≈ 7.5 min | seconds (measured live, see §10) | two orders of magnitude faster |
+| Time to screen one CV | ≈ 7.5 min | 2-5 s (measured, see §10) | ≈ 100-200× faster |
 | HR time for 50 CVs | ≈ 8.9 h | ≈ 1.5 h (review 10 drafts + read 12 borderline/manual CVs) | **≈ −84 %** |
-| Cost for 50 CVs (₺350/h HR cost) | ≈ ₺3,120 | ≈ ₺508 HR + ₺2.5 API ≈ ₺510 | **≈ −84 %** |
+| Cost for 50 CVs (₺350/h HR cost) | ≈ ₺3,120 | ≈ ₺508 HR + ≈ ₺13 API ($0.30) ≈ ₺521 | **≈ −83 %** |
 | Capacity | ≈ 8 CVs/hour per person | hundreds of CVs/hour, 24/7 | no longer limited by HR hours |
-| Consistency | depends on reader & fatigue | same rubric, temperature 0, rule in code | ✔ |
+| Consistency | depends on reader & fatigue | same rubric, schema-constrained output, rule in code | ✔ |
 | Data-entry errors | ≈ 12 % of rows (assumption) | 0, since fields are written by the system | ✔ |
 | Measurability | none | every run timed and logged | ✔ |
 
@@ -499,7 +513,7 @@ same comparison live from the CVs you process.
 | FR-11 | Test mode | `TEST_MODE` / `TEST_RECIPIENT` in *Settings* |
 | FR-12 (optional) | 48 h reminder | 48 h limit on the Wait node, status becomes `Timed out` (reminder mail: future work) |
 | NFR | Error workflow, never crash | Error outputs → `manual_review`; *Error Handler* workflow |
-| NFR | Consistency | `temperature: 0`, schema-constrained output |
+| NFR | Consistency (brief asks for temperature 0) | Sonnet 5.5 does not accept a custom temperature; fixed rubric + JSON schema + code-side rule instead, consistency measured (docs/performance-analysis.md §4) |
 | NFR | Security | API key only in `.env` → n8n credential (encrypted), never in workflow files |
 | NFR | Fairness | Prompt forbids using / asking about protected attributes |
 | NFR | Measurability | `processing_ms`, timestamps, n8n execution log, Performance tab |
@@ -512,8 +526,8 @@ same comparison live from the CVs you process.
 * **API key:** lives only in `.env` (git-ignored) and is stored **encrypted** as an n8n credential.
   It never appears in the workflow JSON or in this repo.
 * **Where data goes:** CVs and results stay on the local machine (Docker volumes). Only the extracted
-  CV *text* is sent to the Gemini API for scoring. For a real deployment, Ekomino should use the
-  paid Gemini API tier (Google does not use paid-tier prompts to train its models), add the
+  CV *text* is sent to the Claude API for scoring. Anthropic does not train its models on API
+  inputs by default. For a real deployment, Ekomino should also add the
   processing to its KVKK privacy notice (*aydınlatma metni*), and agree a retention period with legal.
 * **Data minimisation:** the results table only keeps what HR needs (name, e-mail, scores, short notes).
 * **Fairness:** the prompt explicitly forbids using name, gender, age, photo or marital status, and
@@ -530,7 +544,7 @@ same comparison live from the CVs you process.
 ```
 ekomino-cv-screening/
 ├── docker-compose.yml          # n8n + HR panel + Mailpit, one command to start
-├── .env.example                # copy to .env, add GEMINI_API_KEY
+├── .env.example                # copy to .env, add ANTHROPIC_API_KEY
 ├── n8n/
 │   ├── start.sh                # imports credentials & workflows, publishes them, starts n8n
 │   └── workflows/
@@ -559,9 +573,10 @@ ekomino-cv-screening/
 
 | Symptom | Cause / fix |
 |---|---|
-| Every CV ends in **Manual review** with `Gemini API error 400: API key not valid` | Put a valid key in `.env`, then `docker compose up -d` |
-| `Gemini API error 429` | Free-tier rate limit. Wait a minute, or lower `CONCURRENCY` in `docker-compose.yml` |
-| `Gemini API error 404 ... model` | The model name in **Settings** is not available for your key; try `gemini-2.5-flash` or `gemini-flash-latest` |
+| Every CV ends in **Manual review** with `Claude API error 401: invalid x-api-key` | Put a valid key in `.env`, then `docker compose up -d` |
+| `Claude API error 400 ... credit balance is too low` | Add credit to the Anthropic account |
+| `Claude API error 429` | Rate limit. Wait a minute, or lower `CONCURRENCY` in `docker-compose.yml` |
+| `Claude API error 529` (overloaded) | Temporary; the node retries 3×, otherwise process the CV again later |
 | Red dot next to "n8n" in the panel | n8n is still starting (≈ 20 s) or crashed: `docker compose logs n8n` |
 | Port already in use | Another app uses 3000/5678/8025. Stop it or change the left side of the port mapping in `docker-compose.yml` |
 | Approve shows "Could not send the decision to n8n" | The 48 h window expired, or the run was stopped/restarted. Process the CV again |
@@ -576,7 +591,7 @@ ekomino-cv-screening/
   *Google Sheets → Append*, *Send Email* with *Gmail*, and *Ask HR + Wait* with Gmail's
   *Send and Wait for Response (approval)*. The logic nodes (Settings, Build AI Request, Validate & Decide)
   stay exactly the same.
-* Scanned (image-only) CVs currently go to manual review; OCR or Gemini's PDF/vision input could read them.
+* Scanned (image-only) CVs currently go to manual review; Claude can read PDFs directly (as a document input), which would handle them.
 * A 48 h reminder mail to HR (optional FR-12) before the timeout.
 * Interview scheduling, candidate replies and ATS integration are out of scope (as in the brief).
 * Bias monitoring: periodically compare score distributions across groups on anonymised data.

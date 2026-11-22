@@ -84,7 +84,7 @@ number of applications. Everything else waits for them.
 ```mermaid
 flowchart TD
     S([CV uploaded in the HR panel<br/>or dropped into inbox folder]) --> A[n8n: extract text<br/>automatic]
-    A --> B[Gemini agent: score against<br/>job ad, 5 sub-scores<br/>automatic, seconds]
+    A --> B[Claude agent: score against<br/>job ad, 5 sub-scores<br/>automatic, seconds]
     B --> C[Code: recompute total,<br/>apply thresholds<br/>automatic]
     C --> D[(Results table:<br/>every candidate)]
     C --> E{Decision}
@@ -102,7 +102,7 @@ flowchart TD
 | AS-IS activity | TO-BE | Who/what does it |
 |---|---|---|
 | Download & open CV | Upload / drop in folder (bulk) | HR (seconds for many files) |
-| Read & evaluate | Rubric-based scoring | **AI agent** (Gemini) |
+| Read & evaluate | Rubric-based scoring | **AI agent** (Claude) |
 | Decide | Fixed thresholds in code | **n8n code node** |
 | Record in Excel | Written automatically, every candidate | **n8n → results table** |
 | Write questions | Generated, tailored to the CV | **AI agent** |
@@ -129,5 +129,5 @@ looking only at the borderline (*consider*) and problematic (*manual review*) ca
 | Classic RPA (UiPath / Power Automate) | ✖ for scoring | Good at clicking through structured screens, cannot evaluate free-text CVs |
 | Custom GPT / chat assistant | ✖ | Manual copy-paste per CV, no integration, no record, no approval flow |
 | Multi-agent framework (CrewAI) | ✖ overkill | Coding-heavy; one well-designed agent call is enough here |
-| **n8n + Gemini (AI agent in a workflow)** | ✔ | Visual, self-hosted, built-in PDF/HTTP/mail/approval nodes; LLM reads any CV layout |
-| Local LLM (Ollama) instead of Gemini | ~ | Best privacy, but slow on a laptop and weaker in Turkish; kept as future option |
+| **n8n + Claude (AI agent in a workflow)** | ✔ | Visual, self-hosted, built-in PDF/HTTP/mail/approval nodes; LLM reads any CV layout |
+| Local LLM (Ollama) instead of a cloud model | ~ | Best privacy, but slow on a laptop and weaker in Turkish; kept as future option |

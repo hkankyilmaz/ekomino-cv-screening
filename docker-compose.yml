@@ -9,7 +9,7 @@ services:
     ports:
       - "5678:5678"
     environment:
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GENERIC_TIMEZONE: Europe/Istanbul
       TZ: Europe/Istanbul
       N8N_WEBHOOK_URL: http://localhost:5678/

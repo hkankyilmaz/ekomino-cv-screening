@@ -33,9 +33,12 @@ covers the "RPA-like" parts (moving files, calling APIs, sending mail).
 Self-hosted (CVs do not sit in a third-party automation cloud), free, visual, has a built-in
 "wait for approval" step and PDF extraction, and every run's data and duration are inspectable.
 
-**Why Gemini?**
-Strong Turkish + English, structured JSON output with a schema, fast (seconds), and cheap (free tier for
-the project, ≈ ₺0.05/CV on the paid tier). We also considered a local model (Ollama): better privacy, but much slower on a laptop and weaker in Turkish.
+**Why Claude?**
+It reads Turkish and English CVs well, follows a detailed rubric and fairness rules, and its
+structured outputs guarantee the JSON shape our workflow parses. Sonnet 5.5 answers in 2-5 s for
+≈ $0.006 per CV. We started with Google Gemini, but the model we targeted was closed to new keys
+and the newer ones were overloaded during testing. A local model (Ollama) would give the best
+privacy but is much slower on a laptop and weaker in Turkish.
 
 **What is an "AI agent" in your project?**
 An LLM that gets a role, a goal (screen against this job ad), rules and an output contract,
@@ -45,7 +48,7 @@ It is deliberately a *single, controlled* agent step, because the brief asks for
 ### AI reliability
 
 **What if the AI gives a wrong score?**
-(1) temperature 0 and a strict JSON schema for repeatability; (2) the code clamps every sub-score
+(1) a fixed rubric and a strict JSON schema for repeatability; (2) the code clamps every sub-score
 and recomputes the total, so the **rule is never decided by the AI**; (3) borderline candidates
 (60-74) go to HR; (4) nothing reaches a candidate without HR approval; (5) every score is explained
 by 5 sub-scores + strengths/gaps.
@@ -60,7 +63,7 @@ Schema-constrained output makes that rare; if it happens, the code catches it an
 with the corrupted PDF).
 
 **Is it consistent?**
-Same CV, same prompt, temperature 0 → the score varies by at most a few points (see the consistency test in the performance analysis).
+We measured it: the same CV processed several times stays within a few points (see the consistency test in the performance analysis). Sonnet 5.5 does not let you set temperature, so consistency comes from the rubric, the schema and the code-side rule.
 
 ### Ethics, law, security
 
@@ -70,8 +73,7 @@ The prompt forbids using name, gender, age, photo, marital status, and forbids n
 monitor score distributions on anonymised data.
 
 **KVKK / personal data?**
-CVs and results stay on our machine; only the CV text is sent to the Gemini API. In production:
-paid API tier (not used for training), a KVKK privacy notice that mentions automated pre-screening,
+CVs and results stay on our machine; only the CV text is sent to the Claude API (Anthropic does not train on API data by default). In production: a KVKK privacy notice that mentions automated pre-screening,
 a retention period, access only for HR. Also, under KVKK Art. 11, candidates may object to a decision based
 solely on automated processing, which is another reason the final decision stays with a human.
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Starts n8n with everything pre-configured, so nobody has to click through the n8n UI:
-#   1. creates the two credentials (Gemini API key from .env, local Mailpit SMTP)
+#   1. creates the two credentials (Claude API key from .env, local Mailpit SMTP)
 #   2. imports the workflows from n8n/workflows (the repo is the source of truth)
 #   3. activates the CV screening workflow
 #   4. starts n8n
@@ -9,8 +9,8 @@ set -e
 SEED_DIR=/opt/ekomino
 CRED_FILE=/tmp/ekomino-credentials.json
 
-if [ -z "$GEMINI_API_KEY" ] || [ "$GEMINI_API_KEY" = "paste-your-key-here" ]; then
-  echo "WARNING: GEMINI_API_KEY is not set in .env, every CV will end up in manual review."
+if [ -z "$ANTHROPIC_API_KEY" ] || [ "$ANTHROPIC_API_KEY" = "paste-your-key-here" ]; then
+  echo "WARNING: ANTHROPIC_API_KEY is not set in .env, every CV will end up in manual review."
 fi
 
 # Credentials are created from environment variables at start-up and are stored encrypted
@@ -18,10 +18,10 @@ fi
 cat > "$CRED_FILE" <<EOF
 [
   {
-    "id": "ekominoGeminiKey",
-    "name": "Gemini API Key",
+    "id": "ekominoClaudeKey",
+    "name": "Claude API Key",
     "type": "httpHeaderAuth",
-    "data": { "name": "x-goog-api-key", "value": "${GEMINI_API_KEY}" }
+    "data": { "name": "x-api-key", "value": "${ANTHROPIC_API_KEY}" }
   },
   {
     "id": "ekominoMailpitSmtp",
