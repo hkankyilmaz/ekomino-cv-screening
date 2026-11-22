@@ -45,6 +45,13 @@ An LLM that gets a role, a goal (screen against this job ad), rules and an outpu
 and whose output drives the next actions of a workflow (record, branch, draft questions and mails).
 It is deliberately a *single, controlled* agent step, because the brief asks for a lean solution.
 
+**Can HR change the rules without a developer?**
+Yes. On the panel's **Settings** tab HR edits the job ad, the score weights (must total 100), the
+decision thresholds and the test-mode/e-mail settings. They are sent to n8n with every CV and stored
+with each candidate, so every result can be traced back to the rules it was scored with. Example we
+tested: with easier requirements, education 30 / language 15 and thresholds 70/50, candidate D went
+from 57 (*not a fit*) to 72 (*interview*).
+
 ### AI reliability
 
 **What if the AI gives a wrong score?**

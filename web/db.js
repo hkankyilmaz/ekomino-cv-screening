@@ -47,6 +47,12 @@ db.exec(`
     value REAL NOT NULL
   );
 
+  -- Screening criteria edited on the Settings tab (job ad, weights, thresholds, e-mail), stored as JSON
+  CREATE TABLE IF NOT EXISTS config (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS system_alerts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at TEXT NOT NULL,
@@ -55,11 +61,16 @@ db.exec(`
   );
 `);
 
+// Migration for databases created before criteria were stored per candidate
+try {
+  db.exec("ALTER TABLE candidates ADD COLUMN criteria_json TEXT");
+} catch {}
+
 const FIELDS = [
   "file_name", "source", "uploaded_at", "processed_at", "processing_ms", "candidate", "email",
   "score", "education", "technical", "experience", "language", "projects", "strengths", "gaps",
   "decision", "interview_questions", "mail_subject", "mail_body", "approval_status", "mail_status",
-  "mail_sent_at", "mail_recipient", "decided_at", "resume_url", "n8n_execution_id", "error",
+  "mail_sent_at", "mail_recipient", "decided_at", "resume_url", "n8n_execution_id", "error", "criteria_json",
 ];
 
 const now = () => new Date().toISOString();
@@ -110,6 +121,26 @@ function resetSettings() {
   db.exec("DELETE FROM settings;");
 }
 
+function getConfig(key) {
+  const r = db.prepare("SELECT value FROM config WHERE key = ?").get(key);
+  if (!r) return null;
+  try {
+    return JSON.parse(r.value);
+  } catch {
+    return null;
+  }
+}
+
+function setConfig(key, value) {
+  db.prepare(
+    "INSERT INTO config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  ).run(key, JSON.stringify(value));
+}
+
+function deleteConfig(key) {
+  db.prepare("DELETE FROM config WHERE key = ?").run(key);
+}
+
 function clearAll() {
   // IDs keep counting up (sqlite_sequence is kept), so a late n8n callback for an old run can
   // never land on a new candidate that happens to get the same number.
@@ -128,5 +159,8 @@ module.exports = {
   getSettings,
   saveSettings,
   resetSettings,
+  getConfig,
+  setConfig,
+  deleteConfig,
   clearAll,
 };

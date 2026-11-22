@@ -225,7 +225,7 @@ flowchart TB
 | # | Node | Type | What it does | Why |
 |---|------|------|--------------|-----|
 | 1 | **CV Received** | Webhook | Receives the PDF + `record_id` from the HR panel (`POST /webhook/cv-screening`) | Trigger: every new CV starts the flow automatically (FR-1) |
-| 2 | **Settings** | Code | One place for thresholds, test mode, addresses, model name and the **job ad** | Change behaviour without touching the logic (FR-5, FR-11) |
+| 2 | **Settings** | Code | Reads the screening criteria sent by the panel (job ad, weights, thresholds, test mode, addresses), with defaults as fallback; model settings | Behaviour is changed from the panel without touching the logic (FR-5, FR-11) |
 | 3 | **Extract PDF Text** | Extract from File | Turns the PDF into plain text (Turkish characters preserved) | The AI needs text (FR-2). Error output → manual review |
 | 4 | **Build AI Request** | Code | Builds the prompt + strict JSON schema for Claude; rejects empty/scanned PDFs | Keeps the prompt readable & versioned; cheap early exit |
 | 5 | **Claude · Score CV** | HTTP Request | Calls the Claude Messages API (`POST /v1/messages`) with structured output, retries 3× on failure | The AI agent itself (FR-3, FR-4) |
@@ -277,9 +277,9 @@ sequenceDiagram
 
 The model returns five sub-scores. The **Validate & Decide** node then:
 
-1. clamps each sub-score to its maximum (education 20, technical 35, experience 25, language 10, projects 10),
+1. clamps each sub-score to its maximum, i.e. the weights set in the panel (default: education 20, technical 35, experience 25, language 10, projects 10),
 2. **recomputes the total** as the sum (the model's own total is ignored, but kept as `model_score` for transparency),
-3. applies the thresholds from **Settings**:
+3. applies the thresholds set on the panel's **Settings** tab (defaults below):
 
 | Score | Decision | What the system does |
 |---|---|---|
@@ -430,26 +430,37 @@ cost and capacity. Below that:
 
 <p align="center"><img src="docs/images/performance.png" alt="Performance tab" width="900"></p>
 
+### 8.6 Settings tab
+Change the job ad, score weights, decision thresholds and e-mail/test-mode settings, see §9.1.
+
 ---
 
 ## 9. Configuration
 
-### 9.1 In n8n → workflow **Ekomino · CV Screening Agent** → node **Settings**
+### 9.1 In the HR panel → **Settings** tab (screening criteria)
 
-| Setting | Default | Meaning |
+Every criterion the AI agent and the decision rule use can be changed by HR in the panel,
+with an explanation next to each field and live validation:
+
+| Section | What you set | Rules |
 |---|---|---|
-| `THRESHOLD_INTERVIEW` | `75` | Minimum score for *interview* (inclusive) |
-| `THRESHOLD_CONSIDER` | `60` | Minimum score for *consider* (inclusive) |
-| `TEST_MODE` | `true` | `true` → every candidate mail goes to `TEST_RECIPIENT` instead of the real candidate |
-| `TEST_RECIPIENT` | `test-inbox@ekomino.local` | Where candidate mails go in test mode |
-| `HR_EMAIL` / `SENDER_EMAIL` | `hr@ekomino.local` | Approval requests go to HR; mails are sent from this address |
-| `AI_MODEL` | `claude-sonnet-5-5` | Claude model used for scoring |
-| `AI_EFFORT` | `medium` | How much the model thinks (`low` / `medium` / `high`); higher = slower and more expensive |
-| `JOB_TITLE`, `JOB_REQUIREMENTS` | Junior Operations Analyst | The job ad the CVs are scored against |
+| **1 · Position & job requirements** | Job title, requirements (one per line) | The AI scores every CV against this job ad; title also appears on the dashboard and in the invitation |
+| **2 · Score weights** | Points for education, technical, experience, language, projects | Must add up to exactly **100** (shown live) |
+| **3 · Decision thresholds** | *Interview from* (default 75), *Consider from* (default 60) | Consider < interview; a live score scale shows the three bands |
+| **4 · E-mail & test mode** | Test mode on/off, test inbox address, HR address | Test mode on → invitations go to the test inbox, never to a real candidate |
 
-> Changes made in the n8n editor are overwritten on the next restart, because the repo files are
-> re-imported. To keep them, run `./scripts/export-workflows.sh` and commit the result,
-> or edit `n8n/workflows/cv-screening-agent.json` directly.
+**How it reaches n8n:** when a CV is uploaded, the panel sends the current criteria to the webhook together with
+the PDF (form field `criteria`). The **Settings** node in n8n uses them; its own values are only defaults for a
+call without criteria. The criteria are also **stored with every candidate**, so the detail drawer shows exactly
+which job ad, weights and thresholds a result was based on, even after HR changes them. Changes apply to CVs
+uploaded after saving; already scored candidates keep their result.
+
+<p align="center"><img src="docs/images/settings.png" alt="Settings tab with editable screening criteria" width="900"></p>
+
+Technical settings that are not in the panel stay in the n8n **Settings** node: `AI_MODEL`
+(`claude-sonnet-5-5`), `AI_EFFORT` (`medium`), sender address and internal URLs. Workflow edits made in
+the n8n editor are overwritten on the next restart (the repo files are re-imported); keep them with
+`./scripts/export-workflows.sh`.
 
 ### 9.2 In `.env`
 
@@ -526,13 +537,13 @@ same comparison live from the CVs you process.
 | FR-2 | Text extracted, Turkish characters intact | *Extract PDF Text* node; Turkish sample CVs |
 | FR-3 | 0-100 score + 5 sub-scores (20/35/25/10/10) | Prompt + JSON schema + clamping in *Validate & Decide* |
 | FR-4 | Fixed JSON schema | `responseSchema` in *Build AI Request* |
-| FR-5 | Decision rule in code, thresholds in one place | *Validate & Decide* + *Settings* |
+| FR-5 | Decision rule in code, thresholds in one place | *Validate & Decide*; thresholds edited on the panel's **Settings** tab and sent with every CV |
 | FR-6 | Every candidate recorded | *Save to Results Table* runs for every decision, including errors |
 | FR-7 | 5 CV-specific questions only for interview | Prompt rule + code clears questions for other decisions |
 | FR-8 | Invitation draft created | *Prepare Mail Draft*, shown/editable in the panel and sent to HR |
 | FR-9 | No mail without HR approval; approval/reject/timeout tracked | *Wait for HR Decision* + *Approved?* + *Update Status* |
 | FR-10 | Mail sent after approval, time recorded | *Send Invitation to Candidate* + `mail_sent_at` |
-| FR-11 | Test mode | `TEST_MODE` / `TEST_RECIPIENT` in *Settings* |
+| FR-11 | Test mode | Test mode switch + test inbox address on the panel's **Settings** tab |
 | FR-12 (optional) | 48 h reminder | 48 h limit on the Wait node, status becomes `Timed out` (reminder mail: future work) |
 | NFR | Error workflow, never crash | Error outputs → `manual_review`; *Error Handler* workflow |
 | NFR | Consistency (brief asks for temperature 0) | Sonnet 5.5 does not accept a custom temperature; fixed rubric + JSON schema + code-side rule instead, consistency measured (docs/performance-analysis.md §4) |

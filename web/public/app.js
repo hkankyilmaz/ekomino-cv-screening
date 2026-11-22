@@ -2,13 +2,7 @@
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => Array.from(document.querySelectorAll(s));
 
-const SUB_SCORES = [
-  ["education", 20],
-  ["technical", 35],
-  ["experience", 25],
-  ["language", 10],
-  ["projects", 10],
-];
+const WEIGHT_KEYS = ["education", "technical", "experience", "language", "projects"];
 
 let candidates = [];
 let stats = null;
@@ -48,10 +42,17 @@ function mailChip(c) {
   const cls = { Sent: "ok", "Not sent": "no", "Draft created": "pending" }[c.mail_status] || "";
   return `<span class="chip ${cls}">${esc(status(c.mail_status))}</span>`;
 }
-function scoreColor(score) {
+// Criteria a candidate was scored with (stored per candidate), falling back to the current ones.
+function critOf(c) {
+  try {
+    if (c?.criteria_json) return JSON.parse(c.criteria_json);
+  } catch {}
+  return stats?.criteria || {};
+}
+function scoreColor(score, cr = stats?.criteria || {}) {
   if (score == null) return "var(--gray-soft)";
-  if (score >= 75) return "var(--green-soft)";
-  if (score >= 60) return "var(--blue-soft)";
+  if (score >= (cr.threshold_interview ?? 75)) return "var(--green-soft)";
+  if (score >= (cr.threshold_consider ?? 60)) return "var(--blue-soft)";
   return "var(--gray-soft)";
 }
 
@@ -140,6 +141,11 @@ function renderDashboard() {
   const d = stats.decisions;
   $("#kTotal").textContent = stats.total - stats.processing;
   $("#kProcessing").textContent = stats.processing ? t("inProgress", { n: stats.processing }) : t("allDone");
+  const cr = stats.criteria;
+  $("#jobTitle").textContent = cr.job_title;
+  $("#kInterviewSub").textContent = t("kpiInterviewSub", { i: cr.threshold_interview });
+  $("#kConsiderSub").textContent = t("kpiConsiderSub", { c: cr.threshold_consider, j: cr.threshold_interview - 1 });
+  $("#kRejectSub").textContent = t("kpiRejectSub", { c: cr.threshold_consider });
   $("#kInterview").textContent = d.interview;
   $("#kConsider").textContent = d.consider;
   $("#kReject").textContent = d.reject;
@@ -154,7 +160,7 @@ function renderDashboard() {
         .map(
           (c) => `
       <div class="list-item" data-open="${c.id}">
-        <span class="score" style="background:${scoreColor(c.score)}">${c.score ?? "–"}</span>
+        <span class="score" style="background:${scoreColor(c.score, critOf(c))}">${c.score ?? "–"}</span>
         <div class="grow"><b>${esc(c.candidate || c.file_name)}</b><small>${esc(c.strengths || "")}</small></div>
         <span class="chip pending">${t("review")}</span>
       </div>`
@@ -174,7 +180,7 @@ function renderTable() {
     <tr data-open="${c.id}">
       <td class="muted">${c.id}</td>
       <td><b>${esc(c.candidate || "—")}</b><small>${esc(c.file_name)}${c.source === "folder" ? ` · ${t("folder")}` : ""}</small></td>
-      <td><span class="score" style="background:${scoreColor(c.score)}">${c.score ?? "–"}</span></td>
+      <td><span class="score" style="background:${scoreColor(c.score, critOf(c))}">${c.score ?? "–"}</span></td>
       <td>${chip(c.decision)}</td>
       <td>${approvalChip(c)}</td>
       <td>${mailChip(c)}</td>
@@ -222,10 +228,12 @@ function renderDrawer(id) {
   if (!c) return;
   lastDrawerKey = JSON.stringify(c) + LANG;
   const done = c.decision !== "processing";
-  const subs = SUB_SCORES.map(
+  const cr = critOf(c);
+  const W = cr.weights || {};
+  const subs = WEIGHT_KEYS.map((k) => [k, W[k] ?? 0]).map(
     ([k, max]) => `
       <div class="sub"><span>${t(`sub_${k}`)}</span>
-        <div class="track"><div class="fill" style="width:${Math.round(((c[k] ?? 0) / max) * 100)}%"></div></div>
+        <div class="track"><div class="fill" style="width:${max ? Math.round(((c[k] ?? 0) / max) * 100) : 0}%"></div></div>
         <span>${c[k] ?? "–"} / ${max}</span></div>`
   ).join("");
 
@@ -254,7 +262,7 @@ function renderDrawer(id) {
   const hasAiText = c.strengths || c.gaps || c.interview_questions;
   $("#drawerBody").innerHTML = `
     <div class="d-head">
-      <div class="big-score" style="background:${scoreColor(c.score)}">${c.score ?? "–"}</div>
+      <div class="big-score" style="background:${scoreColor(c.score, cr)}">${c.score ?? "–"}</div>
       <div>
         <h1 style="font-size:20px">${esc(c.candidate || c.file_name)}</h1>
         <div class="meta">${esc(c.email || t("noEmail"))} · ${chip(c.decision)}</div>
@@ -277,6 +285,7 @@ function renderDrawer(id) {
     <div class="d-section meta">
       ${t("metaLine", { received: time(c.uploaded_at), processed: time(c.processed_at), time: secs(c.processing_ms) })}
       ${c.n8n_execution_id ? ` · ${t("execution", { id: esc(c.n8n_execution_id) })}` : ""}
+      ${cr.job_title ? `<br>${esc(t("ruleUsed", { title: cr.job_title, i: cr.threshold_interview, c: cr.threshold_consider, j: cr.threshold_interview - 1, w: WEIGHT_KEYS.map((k) => W[k]).join("/") }))}` : ""}
       ${hasAiText && LANG !== "en" ? `<br>${t("aiNote")}` : ""}
     </div>`;
 
@@ -493,6 +502,126 @@ $("#fileInput").onchange = (e) => {
 ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", (e) => uploadFiles(e.dataTransfer.files));
 
+// ---------- settings tab: screening criteria ----------
+let critData = null;
+let critDirty = false;
+
+async function loadCriteria() {
+  try {
+    critData = await fetch("/api/criteria").then((r) => r.json());
+    renderCritForm();
+  } catch {}
+}
+
+function renderCritForm() {
+  if (!critData) return;
+  const badge = $("#critBadge");
+  badge.textContent = critData.customized ? t("badgeCustom") : t("badgeDefault");
+  badge.className = `chip ${critData.customized ? "ok" : "reject"}`;
+  // weight inputs are generated so their labels follow the language
+  const w = critDirty ? collectCriteria().weights : critData.criteria.weights;
+  $("#weightsGrid").innerHTML = WEIGHT_KEYS.map(
+    (k) => `
+    <div class="field" data-key="weights.${k}">
+      <label for="c-w-${k}">${t(`sub_${k}`)}</label>
+      <div class="row"><input id="c-w-${k}" type="number" min="0" max="100" step="1" value="${w[k]}" /><span class="unit">${t("points")}</span></div>
+      <p>${t(`w_${k}`)}</p>
+    </div>`
+  ).join("");
+  if (!critDirty) {
+    const c = critData.criteria;
+    $("#c-job_title").value = c.job_title;
+    $("#c-job_requirements").value = c.job_requirements.join("\n");
+    $("#c-threshold_interview").value = c.threshold_interview;
+    $("#c-threshold_consider").value = c.threshold_consider;
+    $("#c-test_mode").checked = c.test_mode;
+    $("#c-test_recipient").value = c.test_recipient;
+    $("#c-hr_email").value = c.hr_email;
+  }
+  updateCritPreview();
+}
+
+function collectCriteria() {
+  const num = (id) => {
+    const v = $(id).value.trim();
+    return v === "" ? NaN : Number(v);
+  };
+  const weights = {};
+  WEIGHT_KEYS.forEach((k) => (weights[k] = num(`#c-w-${k}`)));
+  return {
+    job_title: $("#c-job_title").value.trim(),
+    job_requirements: $("#c-job_requirements").value.split("\n").map((l) => l.trim()).filter(Boolean),
+    weights,
+    threshold_interview: num("#c-threshold_interview"),
+    threshold_consider: num("#c-threshold_consider"),
+    test_mode: $("#c-test_mode").checked,
+    test_recipient: $("#c-test_recipient").value.trim(),
+    hr_email: $("#c-hr_email").value.trim(),
+  };
+}
+
+// Live feedback: weight total and the score scale
+function updateCritPreview() {
+  const c = collectCriteria();
+  const sum = WEIGHT_KEYS.reduce((a, k) => a + (Number.isFinite(c.weights[k]) ? c.weights[k] : 0), 0);
+  const ws = $("#weightSum");
+  ws.textContent = sum === 100 ? t("weightSumOk", { n: sum }) : t("weightSumBad", { n: sum });
+  ws.className = `weight-sum ${sum === 100 ? "ok" : "bad"}`;
+  const ti = c.threshold_interview;
+  const tc = c.threshold_consider;
+  if (Number.isInteger(ti) && Number.isInteger(tc) && tc >= 0 && tc < ti && ti <= 100) {
+    $("#scale").innerHTML = `
+      <div class="s-reject" style="flex:${tc}">${tc > 0 ? t("scaleReject", { a: tc - 1 }) : ""}</div>
+      <div class="s-consider" style="flex:${ti - tc}">${t("scaleConsider", { b: tc, c: ti - 1 })}</div>
+      <div class="s-interview" style="flex:${101 - ti}">${t("scaleInterview", { d: ti })}</div>`;
+  } else {
+    $("#scale").innerHTML = "";
+  }
+}
+
+$("#critForm").addEventListener("input", (e) => {
+  critDirty = true;
+  e.target.closest(".field")?.classList.add("changed");
+  e.target.closest(".field")?.classList.remove("invalid");
+  $("#critMsg").textContent = t("critUnsaved");
+  updateCritPreview();
+});
+
+$("#critSave").onclick = async () => {
+  $$("#critForm .field").forEach((f) => f.classList.remove("invalid"));
+  const r = await fetch("/api/criteria", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(collectCriteria()),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    for (const f of j.fields || []) {
+      if (f === "weights_sum") $$("#weightsGrid .field").forEach((el) => el.classList.add("invalid"));
+      else $(`#critForm .field[data-key="${f}"]`)?.classList.add("invalid");
+    }
+    $("#critMsg").textContent = t("critInvalid");
+    return;
+  }
+  critDirty = false;
+  $$("#critForm .field").forEach((f) => f.classList.remove("changed"));
+  $("#critMsg").textContent = t("critSaved");
+  toast(t("critSaved"));
+  await loadCriteria();
+  refresh();
+};
+
+$("#critReset").onclick = async () => {
+  await fetch("/api/criteria/reset", { method: "POST" });
+  critDirty = false;
+  $$("#critForm .field").forEach((f) => f.classList.remove("changed", "invalid"));
+  $("#critMsg").textContent = t("critResetDone");
+  await loadCriteria();
+  refresh();
+};
+
+document.addEventListener("langchange", renderCritForm);
+
 // ---------- boot ----------
 applyStaticTexts();
 try {
@@ -514,6 +643,7 @@ async function openFromHash() {
 window.addEventListener("hashchange", openFromHash);
 
 refresh().then(openFromHash);
+loadCriteria();
 refreshSlow();
 setInterval(refresh, 2500);
 setInterval(refreshSlow, 8000);

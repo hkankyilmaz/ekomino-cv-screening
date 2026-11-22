@@ -50,6 +50,69 @@ const BASELINE_LIMITS = {
 };
 const baseline = () => ({ ...BASELINE_DEFAULTS, ...db.getSettings() });
 
+// Screening criteria (Settings tab). Sent to n8n together with every CV, so the AI prompt and the
+// decision rule always use what HR configured. n8n's Settings node holds the same defaults as a fallback.
+const CRITERIA_DEFAULTS = {
+  job_title: "Junior Operations Analyst",
+  job_requirements: [
+    "Bachelor's degree in Industrial Engineering, Business Administration or a related engineering field",
+    "Advanced Excel (pivot tables, formulas), basic SQL",
+    "Power BI or Python is a plus",
+    "English at B1 level or above",
+    "0-2 years of experience or internships",
+  ],
+  weights: { education: 20, technical: 35, experience: 25, language: 10, projects: 10 },
+  threshold_interview: 75,
+  threshold_consider: 60,
+  test_mode: true,
+  test_recipient: "test-inbox@ekomino.local",
+  hr_email: "hr@ekomino.local",
+};
+const WEIGHT_KEYS = Object.keys(CRITERIA_DEFAULTS.weights);
+const criteria = () => ({ ...CRITERIA_DEFAULTS, ...(db.getConfig("criteria") || {}) });
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+// Returns { value } or { errors: [field, ...] }
+function validateCriteria(body) {
+  const errors = [];
+  const isInt = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  const title = String(body.job_title ?? "").trim();
+  if (!title || title.length > 120) errors.push("job_title");
+  const reqs = Array.isArray(body.job_requirements)
+    ? body.job_requirements.map((r) => String(r).trim()).filter(Boolean)
+    : [];
+  if (reqs.length < 1 || reqs.length > 15 || reqs.some((r) => r.length > 300)) errors.push("job_requirements");
+  const weights = {};
+  for (const k of WEIGHT_KEYS) {
+    const v = Number(body.weights?.[k]);
+    if (!isInt(v, 0, 100)) errors.push(`weights.${k}`);
+    weights[k] = v;
+  }
+  if (WEIGHT_KEYS.reduce((a, k) => a + (weights[k] || 0), 0) !== 100) errors.push("weights_sum");
+  const ti = Number(body.threshold_interview);
+  const tc = Number(body.threshold_consider);
+  if (!isInt(ti, 1, 100)) errors.push("threshold_interview");
+  if (!isInt(tc, 0, 100) || tc >= ti) errors.push("threshold_consider");
+  if (typeof body.test_mode !== "boolean") errors.push("test_mode");
+  const testRecipient = String(body.test_recipient ?? "").trim();
+  const hrEmail = String(body.hr_email ?? "").trim();
+  if (!EMAIL_RE.test(testRecipient)) errors.push("test_recipient");
+  if (!EMAIL_RE.test(hrEmail)) errors.push("hr_email");
+  if (errors.length) return { errors };
+  return {
+    value: {
+      job_title: title,
+      job_requirements: reqs,
+      weights,
+      threshold_interview: ti,
+      threshold_consider: tc,
+      test_mode: body.test_mode,
+      test_recipient: testRecipient,
+      hr_email: hrEmail,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Processing queue: CVs are sent to n8n one by one (at most CONCURRENCY in parallel),
 // so uploading 30 CVs at once does not exceed the Claude API rate limit.
@@ -83,8 +146,13 @@ async function processCv(id) {
   if (!row) return;
   const pdf = fs.readFileSync(cvPath(id));
 
+  // Freeze the criteria for this CV: sent to n8n and stored with the candidate for traceability.
+  const cr = criteria();
+  db.updateCandidate(id, { criteria_json: JSON.stringify(cr) });
+
   const form = new FormData();
   form.append("record_id", String(id));
+  form.append("criteria", JSON.stringify(cr));
   form.append("file_name", row.file_name);
   form.append("cv", new Blob([pdf], { type: "application/pdf" }), row.file_name);
 
@@ -278,6 +346,7 @@ app.get("/api/stats", (_req, res) => {
     mails_sent: rows.filter((r) => r.mail_status === "Sent").length,
     avg_processing_ms: times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null,
     max_processing_ms: times.length ? Math.max(...times) : null,
+    criteria: criteria(),
     baseline: baseline(),
     baseline_defaults: BASELINE_DEFAULTS,
     baseline_customized: Object.keys(db.getSettings()).length > 0,
@@ -300,6 +369,23 @@ app.put("/api/settings", (req, res) => {
   if (invalid.length) return res.status(400).json({ error: "invalid", fields: invalid });
   db.saveSettings(values);
   res.json({ ok: true, baseline: baseline() });
+});
+
+// Screening criteria edited on the Settings tab
+app.get("/api/criteria", (_req, res) => {
+  res.json({ criteria: criteria(), defaults: CRITERIA_DEFAULTS, customized: !!db.getConfig("criteria") });
+});
+
+app.put("/api/criteria", (req, res) => {
+  const r = validateCriteria(req.body || {});
+  if (r.errors) return res.status(400).json({ error: "invalid", fields: r.errors });
+  db.setConfig("criteria", r.value);
+  res.json({ ok: true, criteria: criteria() });
+});
+
+app.post("/api/criteria/reset", (_req, res) => {
+  db.deleteConfig("criteria");
+  res.json({ ok: true, criteria: criteria() });
 });
 
 app.post("/api/settings/reset", (_req, res) => {

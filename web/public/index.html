@@ -21,6 +21,7 @@
       <button class="tab" data-view="upload" data-i18n="tabUpload">Upload CVs</button>
       <button class="tab" data-view="candidates"><span data-i18n="tabCandidates">Candidates</span> <span id="pendingBadge" class="badge hidden"></span></button>
       <button class="tab" data-view="performance" data-i18n="tabPerformance">Performance</button>
+      <button class="tab" data-view="settings" data-i18n="tabSettings">Settings</button>
     </nav>
     <div class="links">
       <span id="n8nStatus" class="dot" title="n8n"></span>
@@ -38,7 +39,7 @@
     <section id="view-dashboard" class="view active">
       <div class="position">
         <div>
-          <h1 data-i18n="jobTitle">Junior Operations Analyst</h1>
+          <h1 id="jobTitle">Junior Operations Analyst</h1>
           <p class="muted" data-i18n="positionSub">Open position · CVs are scored by the AI agent, the final decision always stays with HR.</p>
         </div>
         <button class="btn primary" data-goto="upload" data-i18n="uploadBtn">+ Upload CVs</button>
@@ -46,9 +47,9 @@
 
       <div class="kpis">
         <div class="kpi"><span data-i18n="kpiProcessed">CVs processed</span><strong id="kTotal">0</strong><small id="kProcessing"></small></div>
-        <div class="kpi accent"><span data-i18n="kpiInterview">Invite to interview</span><strong id="kInterview">0</strong><small data-i18n="kpiInterviewSub">score ≥ 75</small></div>
-        <div class="kpi"><span data-i18n="kpiConsider">Consider</span><strong id="kConsider">0</strong><small data-i18n="kpiConsiderSub">score 60–74</small></div>
-        <div class="kpi"><span data-i18n="kpiReject">Not a fit</span><strong id="kReject">0</strong><small data-i18n="kpiRejectSub">score &lt; 60</small></div>
+        <div class="kpi accent"><span data-i18n="kpiInterview">Invite to interview</span><strong id="kInterview">0</strong><small id="kInterviewSub"></small></div>
+        <div class="kpi"><span data-i18n="kpiConsider">Consider</span><strong id="kConsider">0</strong><small id="kConsiderSub"></small></div>
+        <div class="kpi"><span data-i18n="kpiReject">Not a fit</span><strong id="kReject">0</strong><small id="kRejectSub"></small></div>
         <div class="kpi warn"><span data-i18n="kpiManual">Manual review</span><strong id="kManual">0</strong><small data-i18n="kpiManualSub">unreadable / error</small></div>
         <div class="kpi"><span data-i18n="kpiAvg">Avg. time per CV</span><strong id="kAvg">–</strong><small data-i18n="kpiAvgSub">end-to-end</small></div>
       </div>
@@ -161,6 +162,91 @@
           <button type="button" class="btn ghost" id="assumpReset" data-i18n="assumpReset">Reset to defaults</button>
           <span id="assumpMsg" class="meta"></span>
         </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS: every screening criterion is editable here -->
+    <section id="view-settings" class="view">
+      <div class="card">
+        <div class="card-head">
+          <h2 data-i18n="setTitle">Screening criteria</h2>
+          <span id="critBadge" class="chip"></span>
+        </div>
+        <div class="explain" data-i18n-html="setIntro"></div>
+      </div>
+
+      <form id="critForm" novalidate>
+        <div class="card">
+          <h2 data-i18n="secJob">1 · Position &amp; job requirements</h2>
+          <div class="explain" data-i18n-html="secJobHelp"></div>
+          <div class="crit-grid">
+            <div class="field" data-key="job_title">
+              <label for="c-job_title" data-i18n="fJobTitle">Job title</label>
+              <input id="c-job_title" type="text" class="wide" maxlength="120" />
+              <p data-i18n="fJobTitleHelp"></p>
+            </div>
+            <div class="field" data-key="job_requirements">
+              <label for="c-job_requirements" data-i18n="fJobReq">Requirements</label>
+              <textarea id="c-job_requirements" rows="7"></textarea>
+              <p data-i18n="fJobReqHelp"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="secWeights">2 · Score weights</h2>
+          <div class="explain" data-i18n-html="secWeightsHelp"></div>
+          <div id="weightsGrid" class="weights-grid"></div>
+          <div id="weightSum" class="weight-sum"></div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="secThresholds">3 · Decision thresholds</h2>
+          <div class="explain" data-i18n-html="secThresholdsHelp"></div>
+          <div class="crit-grid two">
+            <div class="field" data-key="threshold_interview">
+              <label for="c-threshold_interview" data-i18n="fThInterview">Invite to interview from</label>
+              <div class="row"><input id="c-threshold_interview" type="number" min="1" max="100" step="1" /><span class="unit" data-i18n="points">points</span></div>
+              <p data-i18n="fThInterviewHelp"></p>
+            </div>
+            <div class="field" data-key="threshold_consider">
+              <label for="c-threshold_consider" data-i18n="fThConsider">Consider from</label>
+              <div class="row"><input id="c-threshold_consider" type="number" min="0" max="99" step="1" /><span class="unit" data-i18n="points">points</span></div>
+              <p data-i18n="fThConsiderHelp"></p>
+            </div>
+          </div>
+          <div id="scale" class="scale"></div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="secMail">4 · E-mail &amp; test mode</h2>
+          <div class="explain" data-i18n-html="secMailHelp"></div>
+          <div class="crit-grid">
+            <div class="field" data-key="test_mode">
+              <label class="switch"><input id="c-test_mode" type="checkbox" /> <span data-i18n="fTestMode">Test mode</span></label>
+              <p data-i18n="fTestModeHelp"></p>
+            </div>
+            <div class="field" data-key="test_recipient">
+              <label for="c-test_recipient" data-i18n="fTestRecipient">Test inbox address</label>
+              <input id="c-test_recipient" type="email" class="wide" />
+              <p data-i18n="fTestRecipientHelp"></p>
+            </div>
+            <div class="field" data-key="hr_email">
+              <label for="c-hr_email" data-i18n="fHrEmail">HR e-mail address</label>
+              <input id="c-hr_email" type="email" class="wide" />
+              <p data-i18n="fHrEmailHelp"></p>
+            </div>
+          </div>
+        </div>
+      </form>
+
+      <div class="card save-bar">
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="critSave" data-i18n="critSave">Save criteria</button>
+          <button type="button" class="btn ghost" id="critReset" data-i18n="critReset">Reset to defaults</button>
+          <span id="critMsg" class="meta"></span>
+        </div>
+        <p class="meta" data-i18n="critNote"></p>
       </div>
     </section>
   </main>
