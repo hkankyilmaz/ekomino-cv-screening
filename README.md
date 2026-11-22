@@ -8,6 +8,10 @@
 > lean, working automation that creates measurable business value. The small web panel and the
 > scripts only exist so the workflow can be run and demonstrated end-to-end on one laptop.
 
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="HR panel, dashboard" width="900">
+</p>
+
 
 ---
 
@@ -384,6 +388,8 @@ Drag & drop one or more PDF CVs (up to 50 at once) or click to choose them. Each
 and processed in the background. **Alternative:** copy PDFs into the `inbox/incoming/` folder of the
 project; they are picked up automatically within a few seconds and moved to `inbox/processed/`.
 
+<p align="center"><img src="docs/images/candidates.png" alt="Results table" width="900"></p>
+
 
 ### 8.3 Candidates (results table)
 One row per CV: candidate, score, decision, approval status, mail status, processing time.
@@ -391,7 +397,7 @@ Filter by decision or "waiting for approval", **Export CSV** (same columns as th
 Google Sheet), or **Reset demo data** before a presentation.
 
 ### 8.4 Reviewing and approving a candidate
-Click a row to open the detail drawer:
+Click a row to open the detail drawer (real output of the agent for sample candidate A):
 
 * score breakdown (5 bars) and strengths / gaps,
 * **tailored interview questions** (interview candidates only),
@@ -399,14 +405,20 @@ Click a row to open the detail drawer:
 * **Approve & send invitation** or **Reject (do not send)**,
 * a link to open the original CV.
 
+<p align="center"><img src="docs/images/approval.png" alt="Candidate detail and approval" width="900"></p>
+
 
 After you approve, n8n continues the paused run and sends the mail. The row changes to
 **Approved · Sent**. Open the **Mailbox** (http://localhost:8025) to see it. The approval request
 that HR receives by mail contains a link that opens this drawer directly.
 
+<p align="center"><img src="docs/images/mailbox.png" alt="Local mailbox (Mailpit) with the approval requests and the sent invitation" width="900"></p>
+
 ### 8.5 Performance tab
 Live before/after comparison for the CVs processed in this session: time per CV, HR hours,
 cost, capacity, plus the assumptions used. See §11.
+
+<p align="center"><img src="docs/images/performance.png" alt="Performance tab" width="900"></p>
 
 ---
 
