@@ -335,7 +335,21 @@ app.get("/api/export.csv", (_req, res) => {
 });
 
 // Clean slate before a demo: deletes every record and every uploaded CV.
-app.post("/api/reset", (_req, res) => {
+// Executions still waiting for HR approval in n8n are first closed with "not approved",
+// so they do not wake up 48 h later for a record that no longer exists.
+app.post("/api/reset", async (_req, res) => {
+  const waiting = db.listCandidates().filter((r) => r.approval_status === "Pending" && r.resume_url);
+  for (const r of waiting) {
+    try {
+      await fetch(r.resume_url.replace(/^https?:\/\/[^/]+/, N8N_INTERNAL_URL), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved: false, decided_by: "demo reset" }),
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch {}
+  }
+  if (waiting.length) await new Promise((r) => setTimeout(r, 3000)); // let n8n finish those runs
   db.clearAll();
   const dir = path.join(db.DATA_DIR, "cv");
   for (const f of fs.readdirSync(dir)) fs.rmSync(path.join(dir, f), { force: true });
@@ -384,7 +398,8 @@ app.post("/api/n8n/result", (req, res) => {
 app.post("/api/n8n/status", (req, res) => {
   const b = req.body || {};
   const id = Number(b.record_id);
-  if (!db.getCandidate(id)) return res.status(404).json({ error: "record not found" });
+  // Record already deleted (e.g. demo reset): acknowledge so the n8n run ends cleanly.
+  if (!db.getCandidate(id)) return res.json({ ok: true, ignored: "record no longer exists" });
   db.updateCandidate(id, {
     approval_status: b.approval_status,
     mail_status: b.mail_status,

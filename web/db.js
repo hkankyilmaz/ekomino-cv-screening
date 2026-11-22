@@ -111,7 +111,9 @@ function resetSettings() {
 }
 
 function clearAll() {
-  db.exec("DELETE FROM candidates; DELETE FROM system_alerts; DELETE FROM sqlite_sequence;");
+  // IDs keep counting up (sqlite_sequence is kept), so a late n8n callback for an old run can
+  // never land on a new candidate that happens to get the same number.
+  db.exec("DELETE FROM candidates; DELETE FROM system_alerts;");
 }
 
 module.exports = {
