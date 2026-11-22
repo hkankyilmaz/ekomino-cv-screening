@@ -341,19 +341,116 @@ function renderPerformance() {
     .map(([k, v, c]) => `<div class="bar-row"><span>${t(k)}</span><div class="track"><div class="fill ${c}" style="width:${(v / maxD) * 100}%"></div></div><span>${v}</span></div>`)
     .join("");
 
-  $("#assumptions").innerHTML = [
-    ["a_read", fmtMin(b.asis_read_cv_min)],
-    ["a_record", fmtMin(b.asis_record_min)],
-    ["a_questions", fmtMin(b.asis_questions_min)],
-    ["a_mail", fmtMin(b.asis_mail_min)],
-    ["a_review", fmtMin(b.tobe_review_min)],
-    ["a_hourly", money(b.hr_hourly_cost_try)],
-    ["a_ai", money(b.ai_cost_per_cv_try)],
-    ["a_error", t("pct", { n: Math.round(b.asis_error_rate * 100) })],
-  ]
-    .map(([k, v]) => `<div><b>${t(k)}</b>${v}</div>`)
-    .join("");
+  // --- step-by-step explanation with the live numbers ---
+  const num = (v) => v.toLocaleString(locale(), { maximumFractionDigits: 2 });
+  const step = (title, text, formula, result) => `
+    <div class="calc-step"><b class="t">${title}</b>${text}
+      <code>${esc(formula)}</code>
+      ${result ? `<div class="res">${t("calcResult", { r: result })}</div>` : ""}</div>`;
+  if (!n) {
+    $("#explainCalc").innerHTML = `<p class="empty">${t("calcEmpty")}</p>`;
+  } else {
+    const k = stats.queue?.concurrency || 1;
+    $("#explainCalc").innerHTML = [
+      step(t("calc1Title", { n }), t("calc1Text"),
+        t("calc1Formula", { n, a: num(b.asis_read_cv_min), b: num(b.asis_record_min), i: d.interview, c: num(b.asis_questions_min), d: num(b.asis_mail_min), x: fmtMin(asisTotal) })),
+      step(t("calc2Title"), t("calc2Text"),
+        t("calc2Formula", { i: d.interview, e: num(b.tobe_review_min), c: d.consider, m: d.manual_review, a: num(b.asis_read_cv_min), y: fmtMin(tobeTotal) }),
+        `${fmtMin(asisTotal)} → ${fmtMin(tobeTotal)} (−${pct(asisTotal, tobeTotal)}%)`),
+      step(t("calc3Title"), t("calc3Text"),
+        t("calc3Formula", { x: fmtMin(asisTotal), y: fmtMin(tobeTotal), h: money(b.hr_hourly_cost_try), n, ai: money(b.ai_cost_per_cv_try), cx: money(asisCost), cy: money(tobeCost) }),
+        `${money(asisCost)} → ${money(tobeCost)} (−${pct(asisCost, tobeCost)}%)`),
+      avgS
+        ? step(t("calc4Title"), t("calc4Text"),
+            t("calc4Formula", { a: num(b.asis_read_cv_min), b: num(b.asis_record_min), p: asisThroughput.toFixed(0), s: num(avgS), k, q: tobeThroughput }))
+        : "",
+      step(t("calc5Title"), t("calc5Text"), t("calc5Formula", { e: t("pct", { n: Math.round(b.asis_error_rate * 100) }) })),
+    ].join("");
+  }
+
+  renderAssumptionForm();
 }
+
+// ---------- editable assumptions ----------
+const FIELDS = [
+  ["asis_read_cv_min", "asis", "min"],
+  ["asis_record_min", "asis", "min"],
+  ["asis_questions_min", "asis", "min"],
+  ["asis_mail_min", "asis", "min"],
+  ["asis_error_rate", "asis", "pct"],
+  ["tobe_review_min", "tobe", "min"],
+  ["hr_hourly_cost_try", "cost", "try"],
+  ["ai_cost_per_cv_try", "cost", "try"],
+];
+let formDirty = false;
+const toInput = (key, v) => (key === "asis_error_rate" ? Math.round(v * 1000) / 10 : v);
+const fromInput = (key, v) => (key === "asis_error_rate" ? Number(v) / 100 : Number(v));
+const unitLabel = (u) => (u === "min" ? t("min") : u === "pct" ? "%" : "₺");
+
+function renderAssumptionForm() {
+  const badge = $("#assumpBadge");
+  badge.textContent = stats.baseline_customized ? t("badgeCustom") : t("badgeDefault");
+  badge.className = `chip ${stats.baseline_customized ? "ok" : "reject"}`;
+  if (formDirty) return; // never overwrite what the user is typing
+  const b = stats.baseline;
+  const def = stats.baseline_defaults;
+  $("#assumpForm").innerHTML = FIELDS.map(
+    ([key, tag, unit]) => `
+    <div class="field" data-key="${key}">
+      <span class="tag">${t(`tag_${tag}`)}</span>
+      <label for="f-${key}">${t(`f_${key}`)}</label>
+      <div class="row">
+        <input id="f-${key}" type="number" inputmode="decimal" min="0" step="any" value="${toInput(key, b[key])}" />
+        <span class="unit">${unitLabel(unit)}</span>
+        <span class="def">${t("defaultVal", { v: `${toInput(key, def[key])} ${unitLabel(unit)}` })}</span>
+      </div>
+      <p>${t(`h_${key}`)}</p>
+    </div>`
+  ).join("");
+}
+
+$("#assumpForm").addEventListener("input", (e) => {
+  formDirty = true;
+  const field = e.target.closest(".field");
+  if (field) field.classList.add("changed");
+  $("#assumpMsg").textContent = t("assumpUnsaved");
+});
+
+$("#assumpSave").onclick = async () => {
+  const body = {};
+  let bad = false;
+  $$("#assumpForm .field").forEach((f) => {
+    const key = f.dataset.key;
+    const raw = f.querySelector("input").value.replace(",", ".");
+    const v = fromInput(key, raw);
+    const ok = raw !== "" && Number.isFinite(v) && v >= 0 && (key !== "asis_error_rate" || v <= 1) && (key !== "asis_read_cv_min" || v > 0);
+    f.classList.toggle("invalid", !ok);
+    if (ok) body[key] = v;
+    else bad = true;
+  });
+  if (bad) return ($("#assumpMsg").textContent = t("assumpInvalid"));
+  const r = await fetch("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    (j.fields || []).forEach((k) => $(`.field[data-key="${k}"]`)?.classList.add("invalid"));
+    return ($("#assumpMsg").textContent = t("assumpInvalid"));
+  }
+  formDirty = false;
+  $("#assumpMsg").textContent = t("assumpSaved");
+  await refresh();
+};
+
+$("#assumpReset").onclick = async () => {
+  await fetch("/api/settings/reset", { method: "POST" });
+  formDirty = false;
+  $("#assumpMsg").textContent = t("assumpResetDone");
+  await refresh();
+};
+
+document.addEventListener("langchange", () => {
+  formDirty = false;
+  $("#assumpMsg").textContent = "";
+});
 
 // ---------- upload ----------
 async function uploadFiles(files) {

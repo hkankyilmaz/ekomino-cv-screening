@@ -23,9 +23,9 @@ Each group member screens the sample CVs **by hand**, as the HR specialist would
 4. For a good candidate, write 5 tailored interview questions → **lap** (= *questions*).
 5. Write the invitation e-mail → **stop** (= *mail*).
 
-Average the results across members and CVs and put them into `.env`
-(`ASIS_READ_CV_MIN`, `ASIS_RECORD_MIN`, `ASIS_QUESTIONS_MIN`, `ASIS_MAIL_MIN`).
-The panel's **Performance** tab and the table below then use your numbers.
+Average the results across members and CVs and enter them in the HR panel → **Performance** →
+**Assumptions (editable)** → **Save**. Every number on the page, and the step-by-step
+**How is this calculated?** section, then uses your values. (The starting defaults come from `.env`.)
 
 | Member | CV | Read & evaluate (min) | Record (min) | Questions (min) | Mail (min) |
 |---|---|---|---|---|---|

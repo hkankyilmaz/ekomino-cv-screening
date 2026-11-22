@@ -144,8 +144,22 @@
         </div>
       </div>
       <div class="card">
-        <h2 data-i18n="assumpTitle">Assumptions used</h2>
-        <div id="assumptions" class="assumptions"></div>
+        <h2 data-i18n="explainTitle">How is this calculated?</h2>
+        <div class="explain" data-i18n-html="explainIntro"></div>
+        <div id="explainCalc" class="calc"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2 data-i18n="assumpTitle">Assumptions (editable)</h2>
+          <span id="assumpBadge" class="chip"></span>
+        </div>
+        <div class="explain" data-i18n-html="assumpIntro"></div>
+        <form id="assumpForm" class="assump-form" novalidate></form>
+        <div class="form-actions">
+          <button type="button" class="btn primary" id="assumpSave" data-i18n="assumpSave">Save</button>
+          <button type="button" class="btn ghost" id="assumpReset" data-i18n="assumpReset">Reset to defaults</button>
+          <span id="assumpMsg" class="meta"></span>
+        </div>
       </div>
     </section>
   </main>

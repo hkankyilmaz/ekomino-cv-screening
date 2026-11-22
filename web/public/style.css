@@ -230,3 +230,27 @@ textarea { width: 100%; min-height: 190px; font: inherit; font-size: 14px; paddi
 .lang { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
 .lang button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
 .lang button.active { background: var(--brand); color: var(--brand-ink); }
+
+/* performance: explanation + editable assumptions */
+.explain { font-size: 14.5px; color: var(--text); }
+.explain p { margin: 0 0 10px; }
+.explain ul, .explain ol { margin: 0 0 10px; padding-left: 20px; }
+.explain li { margin-bottom: 4px; }
+.calc { display: grid; gap: 10px; margin-top: 12px; }
+.calc-step { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+.calc-step b.t { display: block; margin-bottom: 4px; }
+.calc-step code { display: block; white-space: pre-wrap; margin-top: 6px; background: var(--gray-soft); padding: 8px 10px; border-radius: 8px; font-size: 13px; }
+.calc-step .res { font-weight: 700; color: var(--green); }
+.assump-form { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
+.field { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.field.changed { border-color: var(--brand); }
+.field.invalid { border-color: var(--red); background: var(--red-soft); }
+.field label { display: block; font-weight: 700; font-size: 14px; }
+.field .tag { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.field .row { display: flex; align-items: center; gap: 8px; margin: 8px 0 6px; }
+.field input { width: 120px; font: inherit; font-size: 16px; font-weight: 700; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.field .unit { color: var(--muted); font-size: 14px; }
+.field .def { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+.field p { margin: 0; font-size: 13px; color: var(--muted); }
+.form-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+@media (max-width: 800px) { .assump-form { grid-template-columns: 1fr; } }

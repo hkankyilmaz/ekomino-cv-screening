@@ -25,8 +25,9 @@ const PROCESSING_TIMEOUT_MS = Number(process.env.PROCESSING_TIMEOUT_MS || 180000
 const CONCURRENCY = Math.max(1, Number(process.env.CONCURRENCY || 2));
 
 // AS-IS (manual process) assumptions used by the performance & gain analysis.
-// Defaults are typical-case estimates; replace them with your own measurements (see docs/performance-analysis.md).
-const BASELINE = {
+// Defaults are typical-case estimates from .env. HR users can overwrite them on the Performance
+// page with their own stopwatch measurements; those values are stored in the database.
+const BASELINE_DEFAULTS = {
   asis_read_cv_min: Number(process.env.ASIS_READ_CV_MIN || 6),
   asis_record_min: Number(process.env.ASIS_RECORD_MIN || 1.5),
   asis_questions_min: Number(process.env.ASIS_QUESTIONS_MIN || 12),
@@ -34,8 +35,20 @@ const BASELINE = {
   asis_error_rate: Number(process.env.ASIS_ERROR_RATE || 0.12),
   tobe_review_min: Number(process.env.TOBE_REVIEW_MIN || 1.5),
   hr_hourly_cost_try: Number(process.env.HR_HOURLY_COST_TRY || 350),
-  ai_cost_per_cv_try: Number(process.env.AI_COST_PER_CV_TRY || 0.05),
+  ai_cost_per_cv_try: Number(process.env.AI_COST_PER_CV_TRY || 0.25),
 };
+// Allowed range per setting (protects the calculations from typos)
+const BASELINE_LIMITS = {
+  asis_read_cv_min: [0.1, 240],
+  asis_record_min: [0, 240],
+  asis_questions_min: [0, 480],
+  asis_mail_min: [0, 240],
+  asis_error_rate: [0, 1],
+  tobe_review_min: [0, 240],
+  hr_hourly_cost_try: [0, 100000],
+  ai_cost_per_cv_try: [0, 1000],
+};
+const baseline = () => ({ ...BASELINE_DEFAULTS, ...db.getSettings() });
 
 // ---------------------------------------------------------------------------
 // Processing queue: CVs are sent to n8n one by one (at most CONCURRENCY in parallel),
@@ -265,12 +278,34 @@ app.get("/api/stats", (_req, res) => {
     mails_sent: rows.filter((r) => r.mail_status === "Sent").length,
     avg_processing_ms: times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null,
     max_processing_ms: times.length ? Math.max(...times) : null,
-    baseline: BASELINE,
+    baseline: baseline(),
+    baseline_defaults: BASELINE_DEFAULTS,
+    baseline_customized: Object.keys(db.getSettings()).length > 0,
     queue: { waiting: queue.length, running, concurrency: CONCURRENCY },
   });
 });
 
 app.get("/api/alerts", (_req, res) => res.json(db.listAlerts()));
+
+// Performance assumptions edited on the Performance page
+app.put("/api/settings", (req, res) => {
+  const values = {};
+  const invalid = [];
+  for (const [key, [min, max]] of Object.entries(BASELINE_LIMITS)) {
+    if (req.body?.[key] === undefined) continue;
+    const v = Number(req.body[key]);
+    if (!Number.isFinite(v) || v < min || v > max) invalid.push(key);
+    else values[key] = v;
+  }
+  if (invalid.length) return res.status(400).json({ error: "invalid", fields: invalid });
+  db.saveSettings(values);
+  res.json({ ok: true, baseline: baseline() });
+});
+
+app.post("/api/settings/reset", (_req, res) => {
+  db.resetSettings();
+  res.json({ ok: true, baseline: baseline() });
+});
 
 app.get("/api/links", async (_req, res) => {
   let n8n = false;

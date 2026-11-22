@@ -415,8 +415,16 @@ that HR receives by mail contains a link that opens this drawer directly.
 <p align="center"><img src="docs/images/mailbox.png" alt="Local mailbox (Mailpit) with the approval requests and the sent invitation" width="900"></p>
 
 ### 8.5 Performance tab
-Live before/after comparison for the CVs processed in this session: time per CV, HR hours,
-cost, capacity, plus the assumptions used. See §11.
+Live before/after comparison for the CVs processed in the panel: time per CV, HR hours,
+cost and capacity. Below that:
+
+* **How is this calculated?** Every formula is written out with the current numbers
+  (e.g. `5 CVs × (6 + 1.5) min + 2 interview candidates × (12 + 4) min = 1.1 h`), so anyone can follow
+  where each result comes from and present it.
+* **Assumptions (editable):** the 8 inputs of the calculation (manual reading time, typing time,
+  question and mail writing time, error rate, approval time, HR hourly cost, AI cost per CV), each
+  with an explanation and how to measure it. Enter your own stopwatch measurements, press **Save**
+  and every number updates; **Reset to defaults** restores the starting values. See §11.
 
 <p align="center"><img src="docs/images/performance.png" alt="Performance tab" width="900"></p>
 
@@ -446,7 +454,7 @@ cost, capacity, plus the assumptions used. See §11.
 | Variable | Meaning |
 |---|---|
 | `ANTHROPIC_API_KEY` | Your Claude API key (never committed, since `.env` is git-ignored) |
-| `ASIS_*`, `TOBE_REVIEW_MIN`, `HR_HOURLY_COST_TRY`, `AI_COST_PER_CV_TRY` | Assumptions for the performance & gain analysis (§11) |
+| `ASIS_*`, `TOBE_REVIEW_MIN`, `HR_HOURLY_COST_TRY`, `AI_COST_PER_CV_TRY` | **Default** values of the performance assumptions (§11). Normally you change them on the **Performance** page instead; values saved there override these |
 
 After changing `.env`: `docker compose up -d` (recreates the containers with the new values).
 

@@ -41,6 +41,12 @@ db.exec(`
     error                TEXT
   );
 
+  -- Values the HR user changed on the Performance page (override the .env defaults)
+  CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value REAL NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS system_alerts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at TEXT NOT NULL,
@@ -87,6 +93,23 @@ function addAlert(source, message) {
 const listAlerts = (limit = 20) =>
   db.prepare("SELECT * FROM system_alerts ORDER BY id DESC LIMIT ?").all(limit);
 
+function getSettings() {
+  const out = {};
+  for (const r of db.prepare("SELECT key, value FROM settings").all()) out[r.key] = r.value;
+  return out;
+}
+
+function saveSettings(values) {
+  const stmt = db.prepare(
+    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+  );
+  for (const [k, v] of Object.entries(values)) stmt.run(k, v);
+}
+
+function resetSettings() {
+  db.exec("DELETE FROM settings;");
+}
+
 function clearAll() {
   db.exec("DELETE FROM candidates; DELETE FROM system_alerts; DELETE FROM sqlite_sequence;");
 }
@@ -100,5 +123,8 @@ module.exports = {
   listCandidates,
   addAlert,
   listAlerts,
+  getSettings,
+  saveSettings,
+  resetSettings,
   clearAll,
 };
